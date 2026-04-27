@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: agentradar-neo4j
+    ports:
+      - "7474:7474"   # browser UI
+      - "7687:7687"   # bolt
+    environment:
+      NEO4J_AUTH: neo4j/agentradar_dev
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    volumes:
+      - neo4j_data:/data
+      - ./neo4j/init:/init
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: agentradar-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: agentradar
+      POSTGRES_PASSWORD: agentradar_dev
+      POSTGRES_DB: agentradar
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  minio:
+    image: minio/minio:latest
+    container_name: agentradar-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: agentradar
+      MINIO_ROOT_PASSWORD: agentradar_dev
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  neo4j_data:
+  postgres_data:
+  minio_data:

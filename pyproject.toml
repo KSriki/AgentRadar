@@ -1,0 +1,60 @@
+# Root pyproject.toml — workspace coordinator only.
+# This file is NOT itself a Python package; it does not have a [project] section.
+
+[tool.uv.workspace]
+members = [
+    "packages/*",
+    "services/*",
+]
+# 'apps/*' is intentionally excluded — apps/dashboard is a Next.js project.
+
+[tool.uv.sources]
+agentradar-core  = { workspace = true }
+agentradar-store = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5",
+    "mypy>=1.11",
+    "types-boto3>=1.0",
+]
+
+# ---------------------------------------------------------------------------
+# Shared tool configuration
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["apps/dashboard"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "ASYNC"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = [
+    "packages/agentradar-core/src",
+    "packages/agentradar-store/src",
+    "services/mcp-server/src",
+    "services/supervisor/src",
+    "services/api/src",
+]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["mcp.*", "neo4j.*", "asyncpg.*", "pgvector.*"]
+ignore_missing_imports = true
