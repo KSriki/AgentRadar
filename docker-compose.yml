@@ -58,7 +58,7 @@ services:
 
   # One-shot container: applies Neo4j schema and creates MinIO bucket,
   # then exits. Healthcheck-gated on the three services above.
-# One-shot: applies Neo4j schema using the official neo4j image.
+  # One-shot: applies Neo4j schema using the official neo4j image.
   init-neo4j:
     image: neo4j:5.20-community
     container_name: agentradar-init-neo4j
@@ -101,6 +101,67 @@ services:
         mc mb --ignore-existing local/agentradar-artifacts
         echo "[init-minio] done."
     restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: agentradar-api
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      init-neo4j:
+        condition: service_completed_successfully
+      init-minio:
+        condition: service_completed_successfully
+    environment:
+      # Override .env defaults to use docker-internal hostnames
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: agentradar_dev
+      POSTGRES_DSN: postgresql://agentradar:agentradar_dev@postgres:5432/agentradar
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: agentradar
+      S3_SECRET_KEY: agentradar_dev
+      S3_BUCKET: agentradar-artifacts
+      AWS_REGION: us-east-1
+      ENVIRONMENT: docker
+      LOG_LEVEL: INFO
+      # Bedrock creds — pass through from your shell or use AWS_PROFILE
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    ports:
+      - "8000:8000"
+    # Override the Dockerfile CMD with reload enabled. uvicorn watches the
+    # bind-mounted source dirs and restarts the app within ~500ms on edits.
+    # Remove --reload + --reload-dir for production.
+    command:
+      - uvicorn
+      - agentradar_api.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/packages
+      - --reload-dir
+      - /app/services/api
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\").read()' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    volumes:
+      - ./packages:/app/packages:ro
+      - ./services/api:/app/services/api:ro
 
 volumes:
   neo4j_data:

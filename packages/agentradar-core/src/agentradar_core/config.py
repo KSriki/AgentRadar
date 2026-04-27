@@ -83,7 +83,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    environment: Literal["local", "dev", "staging", "prod"] = Field(
+    environment: Literal["local", "docker", "dev", "staging", "prod"] = Field(
         default="local", alias="ENVIRONMENT"
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(

@@ -1,0 +1,21 @@
+# Build context exclusions
+.venv
+.uv-cache
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.git
+.gitignore
+.env
+.env.local
+*.log
+.DS_Store
+node_modules
+.next
+apps/dashboard
+tests/
+*.md
+!README.md

@@ -66,6 +66,11 @@ class TestTopLevelSettings:
         with pytest.raises(ValidationError):
             Settings()
 
+    def test_environment_accepts_docker(self, clean_env: pytest.MonkeyPatch) -> None:
+        clean_env.setenv("ENVIRONMENT", "docker")
+        s = Settings()
+        assert s.environment == "docker"
+
     def test_nested_settings_compose(self, clean_env: pytest.MonkeyPatch) -> None:
         """settings.neo4j.uri should be reachable, not just settings.neo4j_uri."""
         clean_env.setenv("NEO4J_URI", "bolt://nested:7687")
