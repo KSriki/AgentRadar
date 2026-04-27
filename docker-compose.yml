@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   neo4j:
     image: neo4j:5.20-community
@@ -11,9 +9,14 @@ services:
       NEO4J_AUTH: neo4j/agentradar_dev
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p agentradar_dev 'RETURN 1' || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
     volumes:
       - neo4j_data:/data
-      - ./neo4j/init:/init
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -24,22 +27,80 @@ services:
       POSTGRES_USER: agentradar
       POSTGRES_PASSWORD: agentradar_dev
       POSTGRES_DB: agentradar
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentradar -d agentradar"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # Anything in /docker-entrypoint-initdb.d runs automatically on first
+      # startup (i.e., when the data volume is empty).
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
 
   minio:
     image: minio/minio:latest
     container_name: agentradar-minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
     environment:
       MINIO_ROOT_USER: agentradar
       MINIO_ROOT_PASSWORD: agentradar_dev
     command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     volumes:
       - minio_data:/data
+
+  # One-shot container: applies Neo4j schema and creates MinIO bucket,
+  # then exits. Healthcheck-gated on the three services above.
+# One-shot: applies Neo4j schema using the official neo4j image.
+  init-neo4j:
+    image: neo4j:5.20-community
+    container_name: agentradar-init-neo4j
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: agentradar_dev
+    volumes:
+      - ./infra/neo4j/init:/cypher:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        echo "[init-neo4j] applying schema..."
+        for f in /cypher/*.cypher; do
+          echo "[init-neo4j]   running $$f"
+          cypher-shell -a "$$NEO4J_URI" -u "$$NEO4J_USER" -p "$$NEO4J_PASSWORD" \
+            --format plain --fail-fast < "$$f"
+        done
+        echo "[init-neo4j] done."
+    restart: "no"
+
+  # One-shot: ensures the MinIO bucket exists, using the official mc image.
+  init-minio:
+    image: minio/mc:latest
+    container_name: agentradar-init-minio
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        echo "[init-minio] configuring alias..."
+        mc alias set local http://minio:9000 agentradar agentradar_dev
+        echo "[init-minio] ensuring bucket 'agentradar-artifacts' exists..."
+        mc mb --ignore-existing local/agentradar-artifacts
+        echo "[init-minio] done."
+    restart: "no"
 
 volumes:
   neo4j_data:
