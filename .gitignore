@@ -29,3 +29,6 @@ Thumbs.db
 # Node (for apps/dashboard later)
 node_modules/
 .next/
+
+# personal
+RESUME_BULLETS
