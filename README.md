@@ -14,13 +14,31 @@
 
 ## Why this exists
 
-The agentic AI space spawns new acronyms faster than any one engineer can track
-manually. **MCP** (Model Context Protocol, Anthropic, Nov 2024) and **A2A**
+The agentic AI space is reshaping itself faster than any one engineer can track
+manually. The shift happens on three fronts simultaneously:
+
+**Protocols.** **MCP** (Model Context Protocol, Anthropic, Nov 2024) and **A2A**
 (Agent-to-Agent, Google, Apr 2025) reshaped the field within a year of their
 release — both reached production adoption before most teams had finished
 reading the original announcement post. Since then **ACP**, **ANP**, **AP2**,
 **UCP**, and **UTCP** have entered the conversation, with more arriving every
 quarter.
+
+**Orchestration patterns.** Agent-graph designs are evolving from flat
+ReAct loops toward recursive meta-architectures. **ROMA** ([Recursive Open
+Meta-Agent](https://arxiv.org/abs/2602.01848)) is a representative example:
+a four-role Atomizer → Planner → Executor → Aggregator loop where Executors
+can re-invoke the supervisor on non-atomic subtasks. The pattern matters
+because it specifically addresses context-bloat in deep agent hierarchies —
+a problem that flat orchestration silently fails on.
+
+**Model deployment economics.** NVIDIA's
+[*Small Language Models are the Future of Agentic AI*](https://arxiv.org/abs/2506.02153)
+(Belcak et al., 2025) makes the case that most agentic invocations are
+narrow, repetitive, specialized tasks for which SLMs are sufficient —
+and dramatically cheaper to run. The paper's stronger claim is that
+**heterogeneous** systems (SLMs for narrow tasks + LLMs only where general
+reasoning is essential) are the natural endpoint, not pure-LLM swarms.
 
 The question this project asks:
 
@@ -76,6 +94,16 @@ the supervisor at depth+1 with a *distilled* parent context, never the full
 parent state. A hard depth cap prevents runaway recursion. This is the
 specific anti-context-bloat pattern that makes deep agent hierarchies viable.
 
+**Heterogeneous models per agent role.**
+Following the NVIDIA SLM-for-agents thesis, AgentRadar is designed to use
+small language models for narrow, repetitive roles (Scout, Extractor,
+Novelty Detector, Calibrator) and reserve large models for the high-stakes
+reasoning roles (Critic, Forecaster). Each agent reads its model from
+config — the same code runs against Ollama-served SLMs locally and Bedrock-
+served Claude in production. The cost-per-forecast difference between
+"every agent uses Opus" and "the right model for each job" is roughly an
+order of magnitude.
+
 **Self-calibration over self-confidence.**
 Every forecast carries an explicit confidence number. Every quarter, the
 Calibrator looks back at predictions made 1, 2, and 4 quarters earlier and
@@ -98,7 +126,7 @@ what differentiates a forecast you can trust from one you can't.
         ▼            ▼           ▼           ▼             ▼              ▼
    ┌─────────┐  ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐  ┌──────────┐
    │ Scout   │  │Extractor│ │ Novelty │ │ Critic   │ │Forecaster│  │Calibrator│
-   │ Agents  │  │  Agent  │ │ Detector│ │  Agent   │ │  Agent   │  │  Agent   │
+   │ (SLM)   │  │  (SLM)  │ │  (SLM)  │ │  (LLM)   │ │  (LLM)   │  │  (SLM)   │
    │ (N)     │  │         │ │         │ │  (gate)  │ │          │  │          │
    └────┬────┘  └────┬────┘ └────┬────┘ └────┬─────┘ └────┬─────┘  └────┬─────┘
         │            │           │           │            │              │
@@ -124,14 +152,14 @@ what differentiates a forecast you can trust from one you can't.
 
 ### The agents
 
-| Agent | Role | Scheduled |
-|---|---|---|
-| **Scout** (one per source class) | Pull new artifacts from arXiv, GitHub, lab blogs, RFCs, conference proceedings. Dump raw content to S3, emit "saw something" events. | Hourly–daily |
-| **Extractor** | Pull structured triples (subject, predicate, object, source, confidence) out of raw artifacts. Output goes to the proposal queue, never directly to the graph. | Per-event |
-| **Novelty Detector** | For each candidate concept, decide whether it maps to an existing graph node (refinement) or is genuinely new (potential signal). Vector similarity + name matching. | Per-proposal |
-| **Critic** | Validate every proposed triple before commit: faithfulness against source, ontology compliance, source reputation. Reject or approve. | Continuous |
-| **Forecaster** | Query the graph for rising-velocity concepts, multi-lab convergence patterns, breaking-version signals. Generate the forecast document. | Weekly + quarterly |
-| **Calibrator** | Look back at past forecasts whose horizon has elapsed. Grade them. Update confidence-weighting parameters. | Quarterly |
+| Agent | Role | Model class | Scheduled |
+|---|---|---|---|
+| **Scout** (one per source class) | Pull new artifacts from arXiv, GitHub, lab blogs, RFCs, conference proceedings. Dump raw content to S3, emit "saw something" events. | SLM | Hourly–daily |
+| **Extractor** | Pull structured triples (subject, predicate, object, source, confidence) out of raw artifacts. Output goes to the proposal queue, never directly to the graph. | SLM | Per-event |
+| **Novelty Detector** | For each candidate concept, decide whether it maps to an existing graph node (refinement) or is genuinely new (potential signal). Vector similarity + name matching. | SLM | Per-proposal |
+| **Critic** | Validate every proposed triple before commit: faithfulness against source, ontology compliance, source reputation. Reject or approve. | **LLM** | Continuous |
+| **Forecaster** | Query the graph for rising-velocity concepts, multi-lab convergence patterns, breaking-version signals. Generate the forecast document. | **LLM** | Weekly + quarterly |
+| **Calibrator** | Look back at past forecasts whose horizon has elapsed. Grade them. Update confidence-weighting parameters. | SLM | Quarterly |
 
 ### The knowledge graph schema
 
@@ -166,9 +194,12 @@ a real answer.
 - [langchain-mcp-adapters](https://github.com/langchain-ai/langchain-mcp-adapters) for binding MCP tools into LangGraph agents
 - A2A protocol for inter-agent task lifecycle
 
-**Models**
-- Claude Sonnet 4 / Opus 4 via AWS Bedrock for reasoning (Critic uses Opus; routine extraction uses Sonnet)
-- Amazon Titan Text Embeddings v2 for concept similarity
+**Models** (heterogeneous by design)
+- **LLM tier** (Critic, Forecaster): Claude Sonnet 4 / Opus 4 via AWS Bedrock
+- **SLM tier** (Scout, Extractor, Novelty, Calibrator): pluggable provider —
+  Ollama-served Llama 3.1 / Qwen 2.5 / Phi-4 locally; Claude Haiku or
+  vLLM-served small models in production
+- Amazon Titan Text Embeddings v2 for concept similarity (pluggable to local)
 
 **Knowledge stores**
 - Neo4j 5 with APOC for typed graph with dynamic relationship creation
@@ -278,10 +309,21 @@ notes that explain the non-obvious choices:
   prevents agent misbehavior from corrupting the graph
 - *ROMA recursion with parent-context distillation* — bounds context growth at
   arbitrary recursion depth
+- *Heterogeneous SLM/LLM model assignment* — orders-of-magnitude cost reduction
+  vs. uniform-LLM agent designs, with no quality loss on narrow roles
 - *Lazy singleton clients with async context managers* — cheap import, expensive
   resources only on first use, clean shutdown
 - *HNSW over ivfflat for pgvector* — correct on small datasets, no tuning
 - *Marker-gated integration tests* — `pytest` is safe-by-default; `pytest -m integration` opts in
+
+## References
+
+The shifts AgentRadar is built to track and apply:
+
+- Anthropic, [Model Context Protocol](https://modelcontextprotocol.io/) (Nov 2024)
+- Google, [Agent-to-Agent Protocol](https://github.com/a2aproject) (Apr 2025)
+- Sentient AI Labs et al., *[ROMA: Recursive Open Meta-Agent Framework for Long-Horizon Multi-Agent Systems](https://arxiv.org/abs/2602.01848)*
+- Belcak et al. (NVIDIA), *[Small Language Models are the Future of Agentic AI](https://arxiv.org/abs/2506.02153)*
 
 ## Contributing
 

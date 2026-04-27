@@ -1,0 +1,196 @@
+"""
+Integration tests for the AgentRadar MCP server tools.
+
+Tools are called directly in-process (the @mcp.tool() decorator does not
+wrap the underlying coroutine). Real Neo4j/Postgres/MinIO required.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+
+
+pytestmark = pytest.mark.integration
+
+
+# ---- search / get ----------------------------------------------------------
+
+
+class TestSearchAndGet:
+    async def test_search_concepts_returns_list(self, clean_pg) -> None:
+        from agentradar_mcp.server import search_concepts
+        # Empty store — should return [] without error
+        # (Skipping this since it'd require a real Bedrock call for embedding.
+        # Covered indirectly by the store-level pgvector test in step 3.)
+        pytest.skip("requires AWS Bedrock; covered by store-level vector test")
+
+    async def test_get_concept_returns_none_for_unknown(self, clean_neo4j) -> None:
+        from agentradar_mcp.server import get_concept
+        result = await get_concept("DefinitelyNotAConcept")
+        assert result is None
+
+
+# ---- propose -> approve flow ----------------------------------------------
+
+
+class TestProposeApproveFlow:
+    async def test_propose_then_approve_writes_to_graph(
+        self, clean_pg, clean_neo4j
+    ) -> None:
+        from agentradar_mcp.server import (
+            approve_triple,
+            list_pending_triples,
+            propose_triple,
+        )
+
+        proposed = await propose_triple(
+            proposer_agent="test",
+            subject="MCP",
+            predicate="INTRODUCED_BY",
+            object="Anthropic",
+            source_id="src-test-1",
+            confidence=0.95,
+        )
+        assert proposed["status"] == "pending"
+
+        pending = await list_pending_triples()
+        assert len(pending) == 1
+        triple_id = pending[0]["id"]
+
+        result = await approve_triple(triple_id)
+        assert result == {"committed": True, "decision": "approved"}
+
+        # Verify the relationship is now in Neo4j
+        async with clean_neo4j.session() as s:
+            row = await (await s.run(
+                """
+                MATCH (s:Concept {name: 'MCP'})-[r:INTRODUCED_BY]->(o:Concept {name: 'Anthropic'})
+                RETURN r.confidence AS c, r.source_id AS src
+                """
+            )).single()
+        assert row is not None
+        assert row["c"] == 0.95
+        assert row["src"] == "src-test-1"
+
+    async def test_propose_then_reject_does_not_write_to_graph(
+        self, clean_pg, clean_neo4j
+    ) -> None:
+        from agentradar_mcp.server import (
+            list_pending_triples,
+            propose_triple,
+            reject_triple,
+        )
+
+        await propose_triple(
+            proposer_agent="test",
+            subject="X", predicate="MADE_UP", object="Y",
+            source_id="src-bad", confidence=0.99,
+        )
+        pending = await list_pending_triples()
+        triple_id = pending[0]["id"]
+
+        result = await reject_triple(triple_id, reason="test rejection")
+        assert result == {"committed": False, "decision": "rejected"}
+
+        # Verify NOTHING is in Neo4j
+        async with clean_neo4j.session() as s:
+            count_row = await (await s.run(
+                "MATCH (n:Concept {name: 'X'}) RETURN count(n) AS c"
+            )).single()
+        assert count_row["c"] == 0
+
+    async def test_double_approve_reports_race(
+        self, clean_pg, clean_neo4j
+    ) -> None:
+        from agentradar_mcp.server import (
+            approve_triple,
+            list_pending_triples,
+            propose_triple,
+        )
+
+        await propose_triple(
+            proposer_agent="test", subject="A", predicate="REL", object="B",
+            source_id="s1", confidence=0.5,
+        )
+        triple_id = (await list_pending_triples())[0]["id"]
+
+        first = await approve_triple(triple_id)
+        second = await approve_triple(triple_id)
+
+        assert first["committed"] is True
+        assert second["committed"] is False
+        assert second["decision"] == "race"
+
+    async def test_invalid_predicate_rejected_at_tool_boundary(
+        self, clean_pg
+    ) -> None:
+        from agentradar_mcp.server import propose_triple
+        # lowercase predicate — fails the _CYPHER_IDENT regex
+        with pytest.raises(ValueError, match="Invalid predicate"):
+            await propose_triple(
+                proposer_agent="test",
+                subject="A", predicate="lowercase_bad", object="B",
+                source_id="s", confidence=0.5,
+            )
+
+
+# ---- mention tracking ------------------------------------------------------
+
+
+class TestMentionFlow:
+    async def test_record_then_get_velocity(self, clean_pg) -> None:
+        from agentradar_mcp.server import get_mention_velocity, record_mention
+        now = datetime.now(UTC).isoformat()
+        await record_mention(
+            concept_name="MCP", source_id="s1",
+            source_type="arxiv", observed_at=now,
+        )
+        v = await get_mention_velocity("MCP", window_days=30)
+        assert v["concept"] == "MCP"
+        assert len(v["buckets"]) >= 1
+
+
+# ---- traversal -------------------------------------------------------------
+
+
+class TestTraverse:
+    async def test_traverse_returns_paths(self, clean_neo4j) -> None:
+        from agentradar_mcp.server import traverse
+
+        # Set up: A -SUPERSEDES-> B -SUPERSEDES-> C
+        await clean_neo4j.commit_triple_relationship(
+            "A", "SUPERSEDES", "B", "src1", 1.0
+        )
+        await clean_neo4j.commit_triple_relationship(
+            "B", "SUPERSEDES", "C", "src2", 1.0
+        )
+
+        paths = await traverse("A", ["SUPERSEDES"], depth=2)
+        assert len(paths) >= 1
+        # At least one path should have 3 nodes (A, B, C)
+        assert any(len(p["nodes"]) == 3 for p in paths)
+
+    async def test_traverse_rejects_invalid_edge_type(self, clean_neo4j) -> None:
+        from agentradar_mcp.server import traverse
+        with pytest.raises(ValueError, match="Invalid edge type"):
+            await traverse("A", ["lowercase_bad"], depth=1)
+
+    async def test_traverse_with_no_edge_types_returns_empty(
+        self, clean_neo4j
+    ) -> None:
+        from agentradar_mcp.server import traverse
+        assert await traverse("A", [], depth=1) == []
+
+
+# ---- healthcheck -----------------------------------------------------------
+
+
+class TestHealthcheck:
+    async def test_all_stores_healthy(self) -> None:
+        from agentradar_mcp.server import healthcheck
+        result = await healthcheck()
+        assert result["neo4j"] is True
+        assert result["postgres"] is True
+        assert result["s3"] is True
