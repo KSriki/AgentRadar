@@ -68,6 +68,20 @@ class EmbeddingSettings(BaseSettings):
     model_id: str = "amazon.titan-embed-text-v2:0"
     dim: int = 1024
 
+class SLMSettings(BaseSettings):
+    """Settings for the SLM (small language model) used by Scout, Extractor, etc."""
+
+    model_config = SettingsConfigDict(env_prefix="SLM_", extra="ignore")
+
+    provider: Literal["ollama", "bedrock"] = "ollama"
+    # Model identifiers per provider. The right setting depends on `provider`.
+    ollama_model: str = "llama3.2:3b"
+    ollama_base_url: str = "http://localhost:11434"
+    bedrock_model_id: str = "anthropic.claude-haiku-4-5-20251001-v1:0"
+    # Generation params
+    max_tokens: int = 512
+    temperature: float = 0.0  # deterministic by default for extraction tasks
+
 
 class Settings(BaseSettings):
     """
@@ -95,6 +109,7 @@ class Settings(BaseSettings):
     s3: S3Settings = Field(default_factory=S3Settings)
     bedrock: BedrockSettings = Field(default_factory=BedrockSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
+    slm: SLMSettings = Field(default_factory=SLMSettings)
 
 
 @lru_cache(maxsize=1)

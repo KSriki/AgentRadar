@@ -7,6 +7,7 @@ from agentradar_core.config import (
     PostgresSettings,
     S3Settings,
     Settings,
+    SLMSettings,
     settings,
 )
 from agentradar_core.logging import (
@@ -36,6 +37,7 @@ __all__ = [
     "PostgresSettings",
     "S3Settings",
     "Settings",
+    "SLMSettings",
     "settings",
     # logging
     "bind_trace_id",

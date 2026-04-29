@@ -135,6 +135,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      SLM_OLLAMA_BASE_URL: http://host.docker.internal:11434
     ports:
       - "8000:8000"
     # Override the Dockerfile CMD with reload enabled. uvicorn watches the
@@ -162,6 +163,7 @@ services:
     volumes:
       - ./packages:/app/packages:ro
       - ./services/api:/app/services/api:ro
+
 
 volumes:
   neo4j_data:
