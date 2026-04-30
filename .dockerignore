@@ -1,4 +1,4 @@
-# Build context exclusions
+# Build context exclusions (defaults — individual Dockerfiles override)
 .venv
 .uv-cache
 __pycache__
@@ -15,7 +15,6 @@ __pycache__
 .DS_Store
 node_modules
 .next
-apps/dashboard
 tests/
 *.md
 !README.md

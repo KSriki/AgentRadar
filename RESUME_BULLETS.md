@@ -117,14 +117,37 @@
   SLM calls, vs. ~150 LLM calls a naive ReAct loop would make for the
   same work — order-of-magnitude cost reduction at the same quality
 
+## Operational Dashboard
+
+- Built **read-only operational dashboard** for AgentRadar: React + Vite +
+  TanStack Query + Tailwind/shadcn-ui, single page with 5 widgets covering
+  system health (data plane + SLM), knowledge-store counts, recent Critic
+  decisions feed, top mentioned concepts with inline-SVG sparkline trends,
+  and quick links to admin tooling. Auto-refreshes every 10s
+- Added **REST API surface alongside MCP tools** in the existing FastAPI
+  app via APIRouter — shares the same async store clients and trace_id
+  propagation as the MCP tools, no code duplication
+- Architected **single-port nginx reverse proxy** as the platform's public
+  face: serves Vite dev server for `/`, proxies `/api/*` to FastAPI REST,
+  proxies `/mcp` to fastmcp Streamable HTTP with `proxy_buffering off`
+  (required for SSE), proxies `/docs` for the OpenAPI explorer.
+  Eliminates CORS by making everything same-origin
+- Dockerized the dashboard for first-class compose integration with HMR
+  preserved through the proxy: bind-mounted source with chokidar polling
+  to handle macOS Docker Desktop's filesystem-event quirks; WebSocket
+  upgrade headers in nginx for Vite HMR; anonymous-volume pattern to keep
+  Linux node_modules separate from host Mac binaries. **`docker compose up`
+  brings up the entire system — data plane, agent API, MCP server, and
+  dashboard — in one command**
+
+
 ---
 
 ## To-do
 
-- Critic agent (faithfulness validation, autonomous loop closure)
+- Critic agent (faithfulness validation, autonomous loop closure) ← NEXT
 - ROMA supervisor wired into LangGraph with checkpointer
 - Forecaster + first weekly digest output
 - Calibrator with Brier-score back-grading
 - Backtest: pre-MCP-launch (Nov 2024) data → does the system flag MCP?
-- Next.js dashboard
 - Terraform module for AWS ECS Fargate deployment

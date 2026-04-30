@@ -1,0 +1,5 @@
+# nginx build only needs infra/nginx/nginx.conf
+packages/
+services/
+apps/
+scripts/

@@ -1,0 +1,5 @@
+# Dashboard build doesn't need backend or infra source
+packages/
+services/
+infra/
+scripts/

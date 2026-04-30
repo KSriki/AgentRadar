@@ -164,6 +164,64 @@ services:
       - ./packages:/app/packages:ro
       - ./services/api:/app/services/api:ro
 
+  nginx:
+    build:
+      context: .
+      dockerfile: infra/nginx/Dockerfile
+    container_name: agentradar-nginx
+    depends_on:
+      api:
+        condition: service_healthy
+      dashboard:                         
+        condition: service_healthy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+    container_name: agentradar-dashboard
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # Vite reads these for HMR / build behavior. CHOKIDAR_USEPOLLING
+      # is a belt-and-suspenders setting alongside the vite.config setting,
+      # since chokidar reads it directly when used by other tools.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      # Bind-mount source for HMR. node_modules stays in the container
+      # (anonymous volume) so the macOS<->Linux mismatch doesn't bite us.
+      - ./apps/dashboard:/app
+      - /app/node_modules
+    healthcheck:
+      # Vite serves the index.html on port 5173. node:20-alpine ships with
+      # `node` but not curl/wget. Use Node's built-in http module via a
+      # tiny inline check, but as separate arguments so Docker doesn't
+      # mistokenize the string.
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:5173/', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+    # No ports published — nginx is the public face. If you ever want to
+    # hit Vite directly (e.g., to debug HMR), uncomment:
+    # ports:
+    #   - "5173:5173"
+
 
 volumes:
   neo4j_data:
