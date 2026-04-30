@@ -159,3 +159,24 @@ class ROMAState(TypedDict, total=False):
     final_result: dict[str, Any]
     parent_context: dict[str, Any]  # DISTILLED summary, not full parent state
     trace_id: str
+
+
+
+## CRITIC
+
+
+
+
+class CriticVerdict(BaseModel):
+    """The Critic's structured decision on a pending triple."""
+
+    verdict: Literal["approved", "rejected"]
+    reasoning: str = Field(
+        description="One-sentence explanation of why the source does or "
+                    "doesn't support the claim."
+    )
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Critic's confidence in its own verdict.",
+    )

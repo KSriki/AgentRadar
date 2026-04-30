@@ -96,6 +96,22 @@ requires-dist = [
 name = "agentradar-supervisor"
 version = "0.1.0"
 source = { editable = "services/supervisor" }
+dependencies = [
+    { name = "agentradar-core" },
+    { name = "agentradar-store" },
+    { name = "fastmcp" },
+    { name = "feedparser" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "agentradar-core", editable = "packages/agentradar-core" },
+    { name = "agentradar-store", editable = "packages/agentradar-store" },
+    { name = "fastmcp", specifier = ">=2.10" },
+    { name = "feedparser", specifier = ">=6.0" },
+    { name = "httpx", specifier = ">=0.27" },
+]
 
 [[package]]
 name = "aioboto3"

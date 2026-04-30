@@ -27,6 +27,7 @@ from agentradar_core.types import (
     TaskSpec,
     Triple,
     TripleStatus,
+    CriticVerdict
 )
 
 __all__ = [
@@ -55,4 +56,5 @@ __all__ = [
     "TaskSpec",
     "Triple",
     "TripleStatus",
+    "CriticVerdict"
 ]

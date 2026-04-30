@@ -69,6 +69,25 @@ A **Calibrator** agent grades past forecasts against actual outcomes, feeding
 the calibration data back into future confidence weighting. Over time, the
 system's track record on its own predictions becomes a measurable artifact.
 
+## How it actually runs
+
+`docker compose up -d` brings up the entire system:
+
+- **nginx** (port 80) — single public entry point; serves the dashboard,
+  proxies API and MCP traffic
+- **dashboard** — Vite-served React app with hot-reload through the proxy
+- **api** — FastAPI hosting both REST endpoints and the fastmcp tool surface
+- **supervisor** — long-running asyncio scheduler that fires Scout every
+  2 hours and Critic every 15 minutes (env-overridable). Connects to the
+  api's MCP endpoint on a persistent client; new trace_id per agent run
+  for full forensic logging
+- **neo4j**, **postgres** (with pgvector), **minio** — the data plane
+- **Ollama on host** — Llama 3.2 3B for narrow agent tasks (Scout's concept
+  extraction, Critic's faithfulness validation)
+
+Open `http://localhost` and within 15 minutes the dashboard fills with real
+arXiv data flowing through the proposer-critic loop, no human input required.
+
 ## Why this design
 
 A few choices that aren't obvious and deserve naming:
@@ -114,41 +133,46 @@ what differentiates a forecast you can trust from one you can't.
 
 ## Architecture
 
-```
-                    ┌──────────────────────────────────┐
-                    │  ROMA Supervisor (LangGraph)     │
-                    │  Atomizer → Planner →            │
-                    │  Executor → Aggregator           │
-                    │  with recursion + depth cap      │
-                    └────────────┬─────────────────────┘
-                                 │ A2A protocol
-        ┌────────────┬───────────┼───────────┬─────────────┬──────────────┐
-        ▼            ▼           ▼           ▼             ▼              ▼
-   ┌─────────┐  ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐  ┌──────────┐
-   │ Scout   │  │Extractor│ │ Novelty │ │ Critic   │ │Forecaster│  │Calibrator│
-   │ (SLM)   │  │  (SLM)  │ │  (SLM)  │ │  (LLM)   │ │  (LLM)   │  │  (SLM)   │
-   │ (N)     │  │         │ │         │ │  (gate)  │ │          │  │          │
-   └────┬────┘  └────┬────┘ └────┬────┘ └────┬─────┘ └────┬─────┘  └────┬─────┘
-        │            │           │           │            │              │
-        └────────────┴───────────┴───────────┴────────────┴──────────────┘
-                                       │
-                              ┌────────▼─────────┐
-                              │  MCP Tool Layer  │
-                              │ • arxiv-mcp      │
-                              │ • github-mcp     │
-                              │ • rss-mcp        │
-                              │ • web-search-mcp │
-                              │ • neo4j-mcp      │
-                              │ • pgvector-mcp   │
-                              └────────┬─────────┘
-                                       │
-                  ┌────────────────────▼────────────────────┐
-                  │    AgentRadar Knowledge Store           │
-                  │ Neo4j: typed graph w/ temporal edges    │
-                  │ pgvector: concept embeddings            │
-                  │ S3:    raw artifact archive             │
-                  └─────────────────────────────────────────┘
-```
+                    ┌─────────────────────────────────────┐
+                    │  Supervisor (asyncio scheduler)     │
+                    │  Scout → 2h · Critic → 15m          │
+                    │  env-driven cadence, graceful SIGTERM│
+                    └────────────┬────────────────────────┘
+                                 │ MCP (HTTP)
+                       ┌─────────▼──────────┐
+                       │   FastAPI + MCP    │
+                       │  REST + tool layer │
+                       └─────────┬──────────┘
+                                 │
+       ┌──────────────┬──────────┼──────────┬──────────────────┐
+       ▼              ▼          ▼          ▼                  ▼
+  ┌─────────┐    ┌────────┐ ┌────────┐ ┌────────┐         ┌──────────┐
+  │  Scout  │    │ Critic │ │ Future │ │ Future │   ...   │ Future   │
+  │ (arXiv) │    │        │ │ Scouts │ │Forecast│         │Calibrator│
+  └─────────┘    └────────┘ └────────┘ └────────┘         └──────────┘
+       │              │          │          │                  │
+       └──────────────┴──────────┴──────────┴──────────────────┘
+                                 │
+                       ┌─────────▼─────────┐
+                       │   MCP Tool Layer  │
+                       │ • Neo4j           │
+                       │ • pgvector        │
+                       │ • S3 (MinIO)      │
+                       │ • SLM (Ollama)    │
+                       └─────────┬─────────┘
+                                 │
+                  ┌──────────────▼──────────────┐
+                  │    Knowledge Store          │
+                  │ Neo4j: typed graph          │
+                  │ pgvector: embeddings        │
+                  │ S3:    raw artifacts        │
+                  └─────────────────────────────┘
+
+   Reverse proxy (nginx :80)
+     /         → React dashboard
+     /api/*    → REST endpoints
+     /mcp      → fastmcp Streamable HTTP
+     /docs     → FastAPI Swagger
 
 ### The agents
 
@@ -289,17 +313,17 @@ docker compose exec postgres psql -U agentradar -d agentradar -c '\dt'
 - [x] Auto-applied schema via docker-compose init sidecars
 - [x] Two-tier test architecture (unit + marker-gated integration)
 - [x] Structured logging with contextvar-based trace propagation
-- [ ] MCP server exposing the knowledge store as tools
-- [ ] ROMA supervisor with recursion + context distillation
-- [ ] First Scout (arXiv) end-to-end through the proposer-critic loop
-- [ ] Critic agent with faithfulness validation (RAGAS)
-- [ ] Novelty Detector with vector + name similarity
+- [x] MCP server exposing the knowledge store as tools
+- [x] First Scout (arXiv) end-to-end through the proposer-critic loop
+- [x] Critic agent with three-stage validation (structural → ontology → faithfulness)
+- [x] Operational dashboard with single-port nginx reverse proxy
+- [x] Supervisor with env-driven schedule, autonomous Scout↔Critic loop
+- [ ] ROMA supervisor wired into LangGraph for complex multi-agent tasks
 - [ ] Forecaster generating first weekly digest
 - [ ] Calibrator with Brier-score back-grading
-- [ ] FastAPI + Next.js dashboard
+- [ ] Additional Scouts: GitHub orgs, lab blogs, RFC drafts
+- [ ] Backtest: feed pre-MCP-launch data, see if the system flags MCP
 - [ ] Terraform module for AWS ECS Fargate deployment
-- [ ] Backtest: feed pre-MCP-launch (Nov 2024) data, see if the system flags MCP
-
 ## Design decisions worth reading about
 
 If you're evaluating this project for technical depth, these are the design
@@ -315,6 +339,10 @@ notes that explain the non-obvious choices:
   resources only on first use, clean shutdown
 - *HNSW over ivfflat for pgvector* — correct on small datasets, no tuning
 - *Marker-gated integration tests* — `pytest` is safe-by-default; `pytest -m integration` opts in
+- *Asyncio supervisor with env-driven schedule* — single-process scheduler
+  with monotonic timing, stagger-on-startup, graceful shutdown, persistent
+  MCP session. ~200 lines of Python; easily replaced with APScheduler or
+  external cron when scale demands it
 
 ## References
 

@@ -117,6 +117,55 @@
   SLM calls, vs. ~150 LLM calls a naive ReAct loop would make for the
   same work — order-of-magnitude cost reduction at the same quality
 
+## Second Agent (Critic) — Autonomous Loop Closure
+
+- Built **Critic agent** that closes AgentRadar's autonomous loop:
+  consumes from the pending-triples queue via MCP, validates each
+  proposal through a three-stage pipeline (structural → ontology →
+  faithfulness), and commits decisions back through the proposer-critic
+  gate with no human in the loop. After Critic exists, Scout-proposes
+  → Critic-decides → Neo4j-grows runs end-to-end without supervision
+- Three-stage validation pipeline ordered cheap-to-expensive: structural
+  regex check (free), ontology membership check against a known-predicate
+  set (free), then SLM-driven faithfulness check (RAGAS-style: does the
+  source document actually support the claim?). 1000 triples → ~800 SLM
+  calls, not 1000 — same SLM-only-where-needed pattern as the Scout
+- **Adopted Wikipedia's verifiability stance over correctness:** the
+  Critic certifies that the source supports the claim, not that the
+  claim is true in the world. Bounds downstream confidence by source
+  reputation, makes the Critic's job tractable for a 3B local model,
+  and keeps the trust boundary honest
+- Structured-output prompting for verdict / reasoning / confidence —
+  no free-form parsing. Defensive JSON-fence stripping for smaller-model
+  habits; rejection-on-parse-failure to fail safe
+- Race-aware MCP integration: Critic decisions go through approve_triple
+  / reject_triple which are themselves race-protected at the database
+  layer (only one Critic instance can decide a given triple, even if
+  multiple are running)
+
+## Autonomous Supervisor
+
+- Built **long-running supervisor** that turns AgentRadar from script-driven
+  to fully autonomous: 200-line asyncio scheduler in its own container,
+  manages MCP client lifecycle, fires Scout every 2h and Critic every 15m,
+  graceful SIGTERM shutdown, exponential backoff on MCP connect retry
+- **Refactored Scout and Critic** from `scripts/` into specialist classes
+  implementing an `Agent` Protocol — same logic, but invoked in-process by
+  the supervisor instead of as standalone scripts. Original CLI scripts
+  retained as ~30-line one-off wrappers for manual demos and debugging
+- **Env-driven schedule** via pydantic-settings so deployments override
+  cadence without code changes; `SCHEDULE_FIRE_ON_STARTUP=true` is the
+  demo-mode escape hatch that fires every job at boot rather than waiting
+  out the interval
+- **Round-robin scheduling across arXiv categories** so the Scout doesn't
+  drown one feed; **trace_id binding per agent invocation** so structured
+  logs let you replay one run end-to-end across api, supervisor, and SLM
+  output
+- **Monotonic clock for interval tracking** (immune to host clock jumps);
+  **shutdown event coupled with `asyncio.wait_for`** so Ctrl-C responds
+  instantly instead of waiting out the tick interval — the kind of detail
+  that separates a script that runs from a service that runs reliably
+
 ## Operational Dashboard
 
 - Built **read-only operational dashboard** for AgentRadar: React + Vite +
@@ -145,9 +194,12 @@
 
 ## To-do
 
-- Critic agent (faithfulness validation, autonomous loop closure) ← NEXT
-- ROMA supervisor wired into LangGraph with checkpointer
+- ~~Critic agent (faithfulness validation, autonomous loop closure)~~ ✓ done
+- ~~Operational dashboard with reverse proxy~~ ✓ done
+- ~~Supervisor with env-driven schedule, autonomous Scout↔Critic loop~~ ✓ done
+- ROMA supervisor in LangGraph (recursive multi-agent tasks) ← NEXT
 - Forecaster + first weekly digest output
 - Calibrator with Brier-score back-grading
+- Additional Scouts: GitHub orgs, lab blogs, RFC drafts
 - Backtest: pre-MCP-launch (Nov 2024) data → does the system flag MCP?
 - Terraform module for AWS ECS Fargate deployment
