@@ -8,6 +8,7 @@ from agentradar_core.config import (
     S3Settings,
     Settings,
     SLMSettings,
+    TavilySettings,
     settings,
 )
 from agentradar_core.logging import (
@@ -39,6 +40,7 @@ __all__ = [
     "S3Settings",
     "Settings",
     "SLMSettings",
+    "TavilySettings",
     "settings",
     # logging
     "bind_trace_id",

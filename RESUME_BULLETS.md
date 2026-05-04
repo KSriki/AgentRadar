@@ -190,16 +190,82 @@
   dashboard — in one command**
 
 
+## Autonomous Supervisor
+
+- Built **long-running supervisor** that turns AgentRadar from script-driven
+  to fully autonomous: 200-line asyncio scheduler in its own container,
+  manages MCP client lifecycle, fires Scout every 2h and Critic every 15m,
+  graceful SIGTERM shutdown, exponential backoff on MCP connect retry
+- **Refactored Scout and Critic** from `scripts/` into specialist classes
+  implementing an `Agent` Protocol — same logic, but invoked in-process
+  by the supervisor instead of as standalone scripts. Original CLI
+  scripts retained as ~30-line one-off wrappers for manual demos
+- **Env-driven schedule** via pydantic-settings so deployments override
+  cadence without code changes; `SCHEDULE_FIRE_ON_STARTUP=true` is the
+  demo-mode escape hatch that fires every job at boot rather than
+  waiting out the interval
+- **Round-robin scheduling across arXiv categories** so the Scout doesn't
+  drown one feed; **trace_id binding per agent invocation** so structured
+  logs let you replay one run end-to-end across api, supervisor, and
+  SLM output
+- **Monotonic clock for interval tracking** (immune to host clock jumps)
+  and **shutdown event coupled with `asyncio.wait_for`** so Ctrl-C
+  responds instantly instead of waiting out the tick interval — the
+  kind of detail that separates a script that runs from a service that
+  runs reliably
+
+## Third Agent (Tavily Scout) — Open-Web Horizon Scanning
+
+- Built **Tavily-powered Scout** that complements the arXiv Scout's
+  academic feed with open-web research: searches Tavily's AI-curated
+  index for agent-protocol announcements, framework releases, and
+  weak-signal blog posts. Critical for the project's headline thesis —
+  catching MCP-equivalent things "before they have a Wikipedia page"
+  requires the open web, not just academia
+- **Same Agent Protocol, completely different shape**: arXiv Scout
+  pulls structured RSS, Tavily Scout asks natural-language research
+  questions. Both implement `Agent.run(mcp)`, both schedule into the
+  same supervisor with no orchestration changes — the architectural
+  prove-out for the agent abstraction
+- **Confidence-weighted by Tavily's relevance score**: a result with
+  Tavily score 0.9 gets propose_triple confidence 0.67; score 0.5
+  gets 0.55. Lets the Critic reason about source quality even before
+  faithfulness validation
+- **Source-ID scheme uses sha256(url)[:32]** to give every web result
+  a stable identifier without storing full URLs as primary keys; lets
+  the Critic later fetch cleaned content from S3 for faithfulness
+  checks the same way it does for arXiv abstracts
+- **Round-robin queries with 6h cadence** — slower than arXiv (2h)
+  because Tavily costs credits and the open web doesn't churn as fast
+  as arXiv submissions. Six default queries cover the project's topic
+  surface without over-spending
+
+## Critic Generalization Across Source Types
+
+- Refactored Critic's source-fetching to **dispatch by source-ID prefix**
+  rather than `if source_id.startswith('arxiv:')` — each source type now
+  knows how to render its S3 artifact as plain text for the SLM to
+  faithfulness-check (`title + abstract` for arxiv, `title + url + content`
+  for tavily). Adding the next source type (GitHub, RFC, etc.) is one
+  new branch in a clear pattern
+- **First multi-source autonomous run validated end-to-end**: arXiv
+  preprints + Tavily web results both flowing through the same
+  proposer-critic gate, both being faithfulness-checked by a 3B
+  local SLM, both yielding typed Neo4j relationships when approved.
+  Three real protocol acronyms (MCP, A2A, AP2) tracked across both
+  source feeds within the first hour of running
+
 ---
 
 ## To-do
 
-- ~~Critic agent (faithfulness validation, autonomous loop closure)~~ ✓ done
-- ~~Operational dashboard with reverse proxy~~ ✓ done
-- ~~Supervisor with env-driven schedule, autonomous Scout↔Critic loop~~ ✓ done
-- ROMA supervisor in LangGraph (recursive multi-agent tasks) ← NEXT
-- Forecaster + first weekly digest output
+- ~~Critic agent (faithfulness validation, autonomous loop closure)~~ ✓
+- ~~Operational dashboard with reverse proxy~~ ✓
+- ~~Supervisor with env-driven schedule, autonomous Scout↔Critic loop~~ ✓
+- ~~Second Scout (Tavily) + multi-source Critic dispatch~~ ✓
+- Forecaster + first weekly digest output ← NEXT
 - Calibrator with Brier-score back-grading
-- Additional Scouts: GitHub orgs, lab blogs, RFC drafts
+- ROMA supervisor in LangGraph (recursive multi-agent tasks)
+- Additional Scouts: GitHub orgs, lab blogs
 - Backtest: pre-MCP-launch (Nov 2024) data → does the system flag MCP?
 - Terraform module for AWS ECS Fargate deployment

@@ -12,6 +12,7 @@ dependencies = [
     "aioboto3>=13.2",
     "numpy>=2.0",
     "httpx>=0.27",
+    "tavily-python>=0.5",    
 ]
 
 [build-system]

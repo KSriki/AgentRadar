@@ -136,6 +136,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       SLM_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
     ports:
       - "8000:8000"
     # Override the Dockerfile CMD with reload enabled. uvicorn watches the
@@ -255,6 +256,10 @@ services:
       SCHEDULE_CRITIC_INTERVAL: "900"              # 15 minutes
       SCHEDULE_SCOUT_ARXIV_CATEGORIES: "cs.AI,cs.LG,cs.CL"
       SCHEDULE_FIRE_ON_STARTUP: "true"
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      # Tavily Scout schedule (6h)
+      SCHEDULE_SCOUT_TAVILY_INTERVAL: "21600"
+      SCHEDULE_SCOUT_TAVILY_MAX_RESULTS: "8"
     extra_hosts:
       # macOS Docker Desktop translates host.docker.internal automatically
       # but on Linux you need this. Harmless on Mac.

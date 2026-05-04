@@ -5,6 +5,7 @@ from agentradar_store.neo4j_client import Neo4jClient, get_neo4j_client
 from agentradar_store.pg_client import PgClient, get_pg_client
 from agentradar_store.s3_client import S3Client, get_s3_client
 from agentradar_store.slm import SLMClient, get_slm_client
+from agentradar_store.tavily import TavilyResearchClient, TavilyResult, get_tavily_client
 
 __all__ = [
     "EmbeddingClient",
@@ -17,4 +18,7 @@ __all__ = [
     "get_s3_client",
     "SLMClient",
     "get_slm_client",
+     "TavilyResearchClient",
+    "TavilyResult",
+    "get_tavily_client"
 ]

@@ -83,33 +83,42 @@ class SLMSettings(BaseSettings):
     temperature: float = 0.0  # deterministic by default for extraction tasks
 
 
+# Add this class alongside the other settings classes
+class TavilySettings(BaseSettings):
+    """Settings for Tavily web-research API."""
+
+    model_config = SettingsConfigDict(env_prefix="TAVILY_", extra="ignore")
+
+    api_key: SecretStr = SecretStr("")
+    # search_depth: "basic" (1 credit) or "advanced" (2 credits)
+    search_depth: Literal["basic", "advanced"] = "advanced"
+    max_results: int = 8
+
 class Settings(BaseSettings):
     """
     Top-level settings. Composed of nested groups so callers can
     pass settings.neo4j to a Neo4j client constructor without
     plumbing every individual field.
     """
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
     )
-
     environment: Literal["local", "docker", "dev", "staging", "prod"] = Field(
         default="local", alias="ENVIRONMENT"
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", alias="LOG_LEVEL"
     )
-
     neo4j: Neo4jSettings = Field(default_factory=Neo4jSettings)
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     s3: S3Settings = Field(default_factory=S3Settings)
     bedrock: BedrockSettings = Field(default_factory=BedrockSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     slm: SLMSettings = Field(default_factory=SLMSettings)
+    tavily: TavilySettings = Field(default_factory=TavilySettings)   # <-- add this
 
 
 @lru_cache(maxsize=1)
