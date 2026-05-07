@@ -6,9 +6,11 @@ requires-python = ">=3.12"
 dependencies = [
     "agentradar-core",
     "agentradar-store",
+    "beautifulsoup4>=4.14.3",
     "fastmcp>=2.10",
     "feedparser>=6.0",
     "httpx>=0.27",
+    "lxml>=6.1.0",
     "pyyaml>=6.0.3",
 ]
 

@@ -1,0 +1,26 @@
+# Lab and vendor RSS/Atom feeds we watch for agentic-AI announcements.
+#
+# These are first-party sources where official launches and major
+# announcements appear before they reach aggregators or arXiv.
+
+feeds:
+  - name: OpenAI News
+    url: https://openai.com/news/rss.xml
+  - name: Google AI Blog
+    url: https://blog.google/innovation-and-ai/technology/ai/rss/
+  - name: DeepMind Blog
+    url: https://deepmind.google/blog/rss.xml
+  - name: LangChain Blog
+    url: https://www.langchain.com/blog/rss
+  - name: Hugging Face Blog
+    url: https://huggingface.co/blog/feed.xml
+  # Anthropic doesn't have a public news RSS feed; we'll discover their
+  # announcements via Tavily searches instead. Their press releases also
+  # surface on HN frequently enough that the HN trend source picks them up.
+
+
+# Cap per-feed entries to consume per run
+max_per_feed: 5
+
+# Window — only consider entries published within this many days
+window_days: 14

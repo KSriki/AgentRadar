@@ -43,6 +43,11 @@ class ScheduleSettings(BaseSettings):
     scout_tavily_interval: int = Field(default=6 * 60 * 60)
     scout_tavily_max_results: int = 8
 
+    # TrendScout: 6h cadence per source. Three sources × 6h = each source
+    # polled twice a day. Faster than Tavily (which costs credits) and
+    # gives the dashboard frequent activity.
+    scout_trends_interval: int = Field(default=6 * 60 * 60)
+
 
 def load_schedule() -> ScheduleSettings:
     """Read the schedule from env. Cached implicitly via pydantic."""

@@ -35,9 +35,18 @@ from agentradar_core import (
     configure_logging,
     get_logger,
 )
-from agentradar_supervisor.agents import Agent, ArxivScout, Critic, TavilyScout
+
+from agentradar_supervisor.agents import (
+    Agent, ArxivScout, Critic, TavilyScout, TrendScout,
+)
+from agentradar_supervisor.agents.trend_sources import (
+    GithubTrendSource, HnTrendSource, LabRssTrendSource,
+)
 from agentradar_supervisor.schedule import ScheduleSettings, load_schedule
 from agentradar_supervisor.config_loader import load_tavily_queries
+
+
+
 
 configure_logging()
 log = get_logger("supervisor")
@@ -241,6 +250,19 @@ def build_supervisor() -> Supervisor:
             query=query,
             max_results=cfg.scout_tavily_max_results,
         )
+    
+    trend_source_factories = [
+        lambda: GithubTrendSource(),
+        lambda: HnTrendSource(),
+        lambda: LabRssTrendSource(),
+    ]
+    trend_idx = 0
+
+    def make_trend_scout() -> Agent:
+        nonlocal trend_idx
+        source_factory = trend_source_factories[trend_idx % len(trend_source_factories)]
+        trend_idx += 1
+        return TrendScout(source=source_factory())
 
     def make_critic() -> Agent:
         return Critic(batch_limit=cfg.critic_batch_limit, dry_run=False)
@@ -255,6 +277,11 @@ def build_supervisor() -> Supervisor:
             name="scout-tavily",
             interval_seconds=cfg.scout_tavily_interval,
             factory=make_tavily_scout,
+        ),
+        ScheduledJob(                               # <-- new
+            name="scout-trends",
+            interval_seconds=cfg.scout_trends_interval,
+            factory=make_trend_scout,
         ),
         ScheduledJob(
             name="critic",

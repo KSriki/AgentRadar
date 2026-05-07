@@ -323,6 +323,45 @@
   here before I knew to look for it."* That's the thing the project
   promises to do — and it actually does it
 
+
+## Fourth Agent (TrendScout) — Multi-Source Trend Aggregation
+
+- Built **TrendScout** that watches heterogeneous trend sources and
+  funnels them through the same SLM extraction + proposer-critic
+  pipeline as the other Scouts. Three concrete sources today, all of
+  which pulled real signal on first run:
+  - **GitHub trending repos** in agentic-AI topics via the GitHub Search
+    REST API (chosen for stability after Atom feeds and HTML scraping
+    both proved deprecated/unreliable)
+  - **Hacker News front-page** filtered for agent-related keywords via
+    Algolia's free HN API
+  - **Lab RSS feeds** from OpenAI, Google AI, DeepMind, LangChain, and
+    HuggingFace — first-party announcements before they reach aggregators
+- **Two-tier abstraction**: `TrendScout` agent class implements the
+  `Agent` protocol at the supervisor boundary. Underneath, a
+  `TrendSource` Protocol lets each source handle its own fetching while
+  emitting uniform `TrendItem` instances. Adding Reddit, Discord, or
+  another source is one new file in `trend_sources/` — the abstraction
+  is now proven across four very different shapes (RSS, REST API,
+  search API, JSON+scraping fallback)
+- **Per-source error isolation validated in production**: on first run,
+  four of nine sources had transient HTTP issues (deprecated Atom
+  feeds, redirects, 404s, HTML structure changes). The supervisor
+  logged each failure with diagnostic context, unaffected sources kept
+  producing data, and fixes were targeted single-file edits — never
+  architectural. Each source now uses the most stable interface
+  available, chosen empirically rather than by convention
+- **Critic generalized cleanly across the new sources**: three new
+  prefix branches in the source-dispatch table (`trend-github:`,
+  `trend-hn:`, `trend-lab_rss:`) for faithfulness validation. The
+  pattern that worked for Tavily continues to scale; eventually this
+  dispatch deserves its own module, but six branches still fit
+  inline cleanly
+- Each source is **independently configured via YAML** under
+  `config/scouts/trend_*.yaml` — topics, keywords, feed URLs, time
+  windows. Same edit-and-restart workflow as Lever 1
+
+
 ---
 
 
@@ -334,9 +373,9 @@
 - ~~Second Scout (Tavily) + multi-source Critic dispatch~~ ✓
 - ~~Config-driven Scout queries (Lever 1)~~ ✓
 - ~~Graph-aware query generation (Lever 2)~~ ✓
+- ~~TrendScout (Lever 3): GitHub, HN, lab RSS~~ ✓
 - Forecaster + first weekly digest output ← NEXT
 - Calibrator with Brier-score back-grading
-- TrendScout (Lever 3): GitHub trending, HN front-page, lab RSS feeds
 - ROMA supervisor in LangGraph (recursive multi-agent tasks)
 - Backtest: pre-MCP-launch (Nov 2024) data → does the system flag MCP?
 - Terraform module for AWS ECS Fargate deployment

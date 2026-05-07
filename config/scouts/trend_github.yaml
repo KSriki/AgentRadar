@@ -1,0 +1,22 @@
+# GitHub trending sources for AgentRadar's TrendScout.
+#
+# We watch trending repos in topics related to agentic AI. GitHub's
+# trending page returns ~25 repos per topic per time window.
+#
+# After editing, restart the supervisor:
+#   docker compose restart supervisor
+
+# Topics to watch — GitHub's topic taxonomy lives at github.com/topics
+topics:
+  - llm-agent
+  - ai-agents
+  - multi-agent-systems
+  - mcp
+  - rag
+
+# Time window: "daily" | "weekly" | "monthly"
+since: weekly
+
+# Cap per topic — keeps SLM cost predictable. ~5 per topic × 5 topics
+# = 25 candidates per run.
+max_per_topic: 5

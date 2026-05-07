@@ -1,0 +1,24 @@
+# Hacker News trending stories, filtered for agentic-AI relevance.
+#
+# We use the Algolia HN API which is free, fast, and supports keyword
+# filtering. We pull recent stories matching agent-related keywords
+# from the front-page tier (high-score threshold).
+
+# Keyword OR-set. A story matching ANY counts as a candidate.
+keywords:
+  - AI agent
+  - LLM agent
+  - autonomous agent
+  - agentic AI
+  - MCP
+  - LangGraph
+  - multi-agent
+
+# Minimum points threshold (front-page typically >= 50)
+min_points: 30
+
+# Time window in hours back from now
+window_hours: 168    # one week
+
+# Cap — keeps SLM cost predictable
+max_results: 15

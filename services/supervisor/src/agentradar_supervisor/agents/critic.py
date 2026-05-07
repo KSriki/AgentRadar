@@ -223,6 +223,36 @@ class Critic:
                     f"URL: {payload.get('url', '')}\n\n"
                     f"CONTENT: {payload.get('content', '')}"
                 )
+            
+            if prefix == "trend-github":
+                body = await s3.get_artifact(f"trends/github/{identifier}.json")
+                payload = json.loads(body.decode("utf-8"))
+                return (
+                    f"REPO: {payload.get('title', '')}\n\n"
+                    f"URL: {payload.get('url', '')}\n\n"
+                    f"DESCRIPTION: {payload.get('summary', '')}\n\n"
+                    f"STARS: {payload.get('extra', {}).get('stars_text', '')}"
+                )
+
+            if prefix == "trend-hn":
+                body = await s3.get_artifact(f"trends/hn/{identifier}.json")
+                payload = json.loads(body.decode("utf-8"))
+                return (
+                    f"TITLE: {payload.get('title', '')}\n\n"
+                    f"URL: {payload.get('url', '')}\n\n"
+                    f"STORY: {payload.get('summary', '')}\n\n"
+                    f"POINTS: {payload.get('extra', {}).get('points', '')}"
+                )
+
+            if prefix == "trend-lab_rss":
+                body = await s3.get_artifact(f"trends/lab_rss/{identifier}.json")
+                payload = json.loads(body.decode("utf-8"))
+                return (
+                    f"LAB: {payload.get('extra', {}).get('lab_name', '')}\n\n"
+                    f"TITLE: {payload.get('title', '')}\n\n"
+                    f"URL: {payload.get('url', '')}\n\n"
+                    f"CONTENT: {payload.get('summary', '')}"
+                )
 
             log.warning("critic.unknown_source_type",
                         source_id=source_id, prefix=prefix)

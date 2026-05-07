@@ -2,6 +2,6 @@
 
 from agentradar_supervisor.agents.base import Agent
 from agentradar_supervisor.agents.critic import Critic
-from agentradar_supervisor.agents.scout import ArxivScout, TavilyScout
+from agentradar_supervisor.agents.scout import ArxivScout, TavilyScout, TrendScout
 
-__all__ = ["Agent", "ArxivScout", "Critic", "TavilyScout"]
+__all__ = ["Agent", "ArxivScout", "Critic", "TavilyScout", "TrendScout"]
