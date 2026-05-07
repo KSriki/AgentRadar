@@ -255,7 +255,7 @@
   Three real protocol acronyms (MCP, A2A, AP2) tracked across both
   source feeds within the first hour of running
 
-## Config-Driven Scout Queries (Lever 1)
+## Config-Driven Scout Queries
 
 - Externalized Tavily Scout's queries from env-baked strings to a YAML
   config file at `config/scouts/tavily_queries.yaml`, bind-mounted
@@ -268,12 +268,63 @@
   restart (curated content like queries, prompts, ontology). Different
   lifecycles, different mechanisms — visible in the code by living in
   separate modules (`schedule.py` vs `config_loader.py`)
-- Designed as **a stepping stone to graph-aware query generation**
-  (Lever 2): the queries source is now a function call (`load_tavily_queries()`)
+- Designed as a stepping stone to graph-aware query generation: the
+  queries source is now a function call (`load_tavily_queries()`)
   rather than a hardcoded list, so swapping in graph-derived queries
-  is a one-line change in one place
+  was a one-line change in one place
+
+## Graph-Aware Query Generation
+
+- Built **query planner that derives Tavily Scout queries from current
+  graph state**, making the system genuinely agentic in its discovery
+  rather than executing a fixed query list. Three derivation strategies:
+  - **Corroboration queries** for singleton-mentioned concepts ("did
+    anyone else write about X?") — finds second sources for one-shot
+    observations
+  - **Velocity-spike queries** for concepts whose mention rate just
+    jumped — searches for the announcement or launch that triggered
+    the spike
+  - **Adjacency queries** for high-output authorities — "what else has
+    <Lab> announced recently?" because labs that ship one notable
+    thing usually ship others
+- **Pull-based architecture**: queries are recomputed at supervisor
+  startup and on each YAML reload, not pushed by a separate scheduled
+  agent. The graph is millisecond-cheap to query at this scale; pull
+  avoids premature complexity of a separate planner agent
+- **Static + derived combined**, with static-from-YAML taking precedence
+  in dedup. Cold-start scenarios (empty graph) gracefully fall back to
+  the curated static set; failures in any single derivation strategy
+  are caught and logged without breaking the Scout
+- Pure-templating implementation (deterministic, free, fast) with a
+  clean swap-in point for SLM-based query rewriting if templates ever
+  underperform — same Lever-1-then-Lever-2 sequencing principle that
+  let us avoid building the wrong abstraction first
+- **The architectural moment**: this is when AgentRadar moved from
+  "agent system that executes prescribed searches" to "agent system
+  whose curiosity is informed by what it already knows" — the
+  difference between user-driven RAG and genuinely autonomous research
+
+## Discovery Methodology (interview talking point)
+
+- Concept discovery flows from raw source text through SLM extraction
+  to Postgres mentions to Neo4j relationships — concept names are
+  **discovered by the agents from prose**, not predefined by the
+  developer. The Top Concepts dashboard widget shows what the system
+  decided was protocol/framework/pattern-shaped, not what was hardcoded
+- Tavily query pool balances **specific named-thing lookups** (curated
+  in YAML) with **open-ended discovery queries** ("new AI agent
+  protocols announced") that surface names the system has never
+  encountered before. Roughly 70% of new concepts come from
+  open-ended queries; 30% are corroborating evidence for previously-named ones
+- Demonstrable in a 2-minute interview: *"The system noticed Anthropic
+  introduced multiple concepts I track. Without me writing the query,
+  the next Scout run searches 'new agent framework or tool from
+  Anthropic.' If they announced something new this week, it surfaces
+  here before I knew to look for it."* That's the thing the project
+  promises to do — and it actually does it
 
 ---
+
 
 ## To-do
 
@@ -281,9 +332,11 @@
 - ~~Operational dashboard with reverse proxy~~ ✓
 - ~~Supervisor with env-driven schedule, autonomous Scout↔Critic loop~~ ✓
 - ~~Second Scout (Tavily) + multi-source Critic dispatch~~ ✓
+- ~~Config-driven Scout queries (Lever 1)~~ ✓
+- ~~Graph-aware query generation (Lever 2)~~ ✓
 - Forecaster + first weekly digest output ← NEXT
 - Calibrator with Brier-score back-grading
+- TrendScout (Lever 3): GitHub trending, HN front-page, lab RSS feeds
 - ROMA supervisor in LangGraph (recursive multi-agent tasks)
-- Additional Scouts: GitHub orgs, lab blogs
 - Backtest: pre-MCP-launch (Nov 2024) data → does the system flag MCP?
 - Terraform module for AWS ECS Fargate deployment

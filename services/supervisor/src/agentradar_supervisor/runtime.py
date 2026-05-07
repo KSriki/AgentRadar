@@ -219,7 +219,7 @@ def build_supervisor() -> Supervisor:
 
     # Tavily queries from YAML config file (reloadable on supervisor restart
     # without rebuilding the container — just edit the file and restart).
-    tavily_queries = load_tavily_queries()
+    tavily_queries = asyncio.run(load_tavily_queries())
 
     arxiv_idx = 0
     tavily_idx = 0

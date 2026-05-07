@@ -9,7 +9,7 @@ queries — these are hot paths called by multiple agents.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -252,6 +252,90 @@ class PgClient:
         except Exception as exc:
             log.warning("postgres.healthcheck_failed", error=str(exc))
             return False
+        
+    # ---- Graph-aware query generation support ---------------------------
+
+    async def find_singleton_concepts(
+        self, window_days: int = 30, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """
+        Concepts mentioned exactly once in the last N days.
+
+        These are the highest-value-to-corroborate items: a single mention
+        is either a real new thing or noise, and a targeted search will
+        cheaply tell us which.
+
+        Returns: [{"concept": str, "source_id": str, "observed_at": datetime}, ...]
+        """
+        pool = await self._ensure()
+        cutoff = datetime.now(UTC) - timedelta(days=window_days)
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT concept_name, MIN(source_id) AS source_id,
+                       MIN(observed_at) AS observed_at
+                FROM mention_events
+                WHERE observed_at >= $1
+                GROUP BY concept_name
+                HAVING COUNT(*) = 1
+                ORDER BY observed_at DESC
+                LIMIT $2
+                """,
+                cutoff, limit,
+            )
+        return [
+            {
+                "concept": r["concept_name"],
+                "source_id": r["source_id"],
+                "observed_at": r["observed_at"],
+            }
+            for r in rows
+        ]
+
+    async def find_velocity_spikes(
+        self, window_days: int = 14, min_recent_mentions: int = 3, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """
+        Concepts whose recent mention count is meaningfully higher than
+        prior baseline. A "spike" here means: at least min_recent_mentions
+        mentions in the recent half of the window, and at least 2x the
+        count from the prior half.
+
+        Returns: [{"concept": str, "recent_count": int, "prior_count": int}, ...]
+        """
+        pool = await self._ensure()
+        now = datetime.now(UTC)
+        midpoint = now - timedelta(days=window_days // 2)
+        full_start = now - timedelta(days=window_days)
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    concept_name,
+                    COUNT(*) FILTER (WHERE observed_at >= $1)::int AS recent_count,
+                    COUNT(*) FILTER (WHERE observed_at >= $2 AND observed_at < $1)::int AS prior_count
+                FROM mention_events
+                WHERE observed_at >= $2
+                GROUP BY concept_name
+                HAVING COUNT(*) FILTER (WHERE observed_at >= $1) >= $3
+                   AND COUNT(*) FILTER (WHERE observed_at >= $1) >=
+                       2 * GREATEST(COUNT(*) FILTER (WHERE observed_at >= $2 AND observed_at < $1), 1)
+                ORDER BY (
+                    COUNT(*) FILTER (WHERE observed_at >= $1)::float /
+                    GREATEST(COUNT(*) FILTER (WHERE observed_at >= $2 AND observed_at < $1), 1)
+                ) DESC
+                LIMIT $4
+                """,
+                midpoint, full_start, min_recent_mentions, limit,
+            )
+        return [
+            {
+                "concept": r["concept_name"],
+                "recent_count": r["recent_count"],
+                "prior_count": r["prior_count"],
+            }
+            for r in rows
+        ]
 
 
 # ---- helpers ---------------------------------------------------------------

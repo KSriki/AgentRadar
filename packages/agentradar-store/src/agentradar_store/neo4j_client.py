@@ -143,6 +143,29 @@ class Neo4jClient:
         except Exception as exc:
             log.warning("neo4j.healthcheck_failed", error=str(exc))
             return False
+        
+    async def list_top_authorities(
+        self, limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """
+        Authorities (orgs/labs) that introduced the most concepts we track.
+        These are high-yield targets for adjacency queries: 'what else
+        has <authority> announced recently?'
+
+        Returns: [{"authority": str, "concept_count": int}, ...]
+        """
+        async with self.session() as s:
+            result = await s.run(
+                """
+                MATCH (a:Authority)<-[:INTRODUCED_BY]-(c:Concept)
+                WITH a.name AS authority, count(c) AS n
+                ORDER BY n DESC
+                LIMIT $limit
+                RETURN authority, n AS concept_count
+                """,
+                limit=limit,
+            )
+            return [dict(r) async for r in result]
 
 
 # ---- module-level singleton -----------------------------------------------
