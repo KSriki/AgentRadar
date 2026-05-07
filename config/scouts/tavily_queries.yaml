@@ -1,0 +1,31 @@
+# Tavily Scout queries.
+#
+# Each query is one search invocation per Scout run. The supervisor's
+# round-robin picks the next query from this list each time the Scout
+# fires (every 6h by default), so this list defines the system's
+# topic surface area over time.
+#
+# Design guidance:
+#   - Mostly OPEN-ENDED (discovery): "new AI agent X" type queries that
+#     surface names the system has never seen before
+#   - Some SPECIFIC (corroboration): targeted searches for things we
+#     already track, to find supporting evidence and updates
+#
+# After editing this file, restart the supervisor:
+#   docker compose restart supervisor
+
+queries:
+  # ---------- Open-ended discovery queries (the workhorses) -----------
+  - new AI agent protocols announced
+  - new AI agent orchestration frameworks released this month
+  - agent-to-agent communication standards
+  - agentic AI architectural patterns
+  - AI agent tools introduced this quarter
+  - new multi-agent system frameworks
+
+  # ---------- Specific-named follow-ups (corroboration) --------------
+  # Use sparingly — these confirm what we already know rather than
+  # discover new things. Comment out or remove once a concept is
+  # well-tracked.
+  - MCP Model Context Protocol updates
+  - LangGraph multi-agent orchestration

@@ -17,6 +17,7 @@ COPY services/supervisor/pyproject.toml services/supervisor/
 
 COPY packages/ packages/
 COPY services/supervisor/ services/supervisor/
+COPY config/ config/
 
 RUN uv sync --no-dev --package agentradar-supervisor --frozen
 

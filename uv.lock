@@ -104,6 +104,7 @@ dependencies = [
     { name = "fastmcp" },
     { name = "feedparser" },
     { name = "httpx" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -113,6 +114,7 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=2.10" },
     { name = "feedparser", specifier = ">=6.0" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [[package]]

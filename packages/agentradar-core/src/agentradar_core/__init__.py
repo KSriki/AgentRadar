@@ -9,6 +9,7 @@ from agentradar_core.config import (
     Settings,
     SLMSettings,
     TavilySettings,
+    ScoutSettings,
     settings,
 )
 from agentradar_core.logging import (
@@ -41,6 +42,7 @@ __all__ = [
     "Settings",
     "SLMSettings",
     "TavilySettings",
+    "ScoutSettings",
     "settings",
     # logging
     "bind_trace_id",

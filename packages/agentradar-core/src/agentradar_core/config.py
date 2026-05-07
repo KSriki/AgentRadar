@@ -94,6 +94,16 @@ class TavilySettings(BaseSettings):
     search_depth: Literal["basic", "advanced"] = "advanced"
     max_results: int = 8
 
+class ScoutSettings(BaseSettings):
+    """Settings for Scout-related config files and behavior."""
+
+    model_config = SettingsConfigDict(env_prefix="SCOUT_", extra="ignore")
+
+    # Path to the YAML file containing Tavily queries. Relative paths
+    # are resolved against the repo root (or container WORKDIR in compose).
+    tavily_queries_path: str = "config/scouts/tavily_queries.yaml"
+
+
 class Settings(BaseSettings):
     """
     Top-level settings. Composed of nested groups so callers can
@@ -119,6 +129,7 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     slm: SLMSettings = Field(default_factory=SLMSettings)
     tavily: TavilySettings = Field(default_factory=TavilySettings)   # <-- add this
+    scout: ScoutSettings = Field(default_factory=ScoutSettings)
 
 
 @lru_cache(maxsize=1)

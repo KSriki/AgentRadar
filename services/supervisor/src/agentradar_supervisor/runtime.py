@@ -37,6 +37,7 @@ from agentradar_core import (
 )
 from agentradar_supervisor.agents import Agent, ArxivScout, Critic, TavilyScout
 from agentradar_supervisor.schedule import ScheduleSettings, load_schedule
+from agentradar_supervisor.config_loader import load_tavily_queries
 
 configure_logging()
 log = get_logger("supervisor")
@@ -216,12 +217,9 @@ def build_supervisor() -> Supervisor:
     if not arxiv_categories:
         raise ValueError("SCHEDULE_SCOUT_ARXIV_CATEGORIES must be non-empty")
 
-    # Tavily queries — round-robin
-    tavily_queries = [
-        q.strip() for q in cfg.scout_tavily_queries.split(",") if q.strip()
-    ]
-    if not tavily_queries:
-        raise ValueError("SCHEDULE_SCOUT_TAVILY_QUERIES must be non-empty")
+    # Tavily queries from YAML config file (reloadable on supervisor restart
+    # without rebuilding the container — just edit the file and restart).
+    tavily_queries = load_tavily_queries()
 
     arxiv_idx = 0
     tavily_idx = 0

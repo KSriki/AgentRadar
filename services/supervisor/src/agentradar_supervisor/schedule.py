@@ -41,14 +41,6 @@ class ScheduleSettings(BaseSettings):
     # Tavily Scout: 6h cadence — slower than arXiv because Tavily costs
     # credits and the open web doesn't change as fast as arXiv submissions.
     scout_tavily_interval: int = Field(default=6 * 60 * 60)
-    scout_tavily_queries: str = (
-        "new AI agent protocols announced"
-        ",agent-to-agent communication standards"
-        ",agentic AI architectural patterns"
-        ",MCP Model Context Protocol updates"
-        ",LangGraph multi-agent orchestration"
-        ",AI agent framework benchmarks"
-    )
     scout_tavily_max_results: int = 8
 
 

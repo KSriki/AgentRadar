@@ -255,6 +255,24 @@
   Three real protocol acronyms (MCP, A2A, AP2) tracked across both
   source feeds within the first hour of running
 
+## Config-Driven Scout Queries (Lever 1)
+
+- Externalized Tavily Scout's queries from env-baked strings to a YAML
+  config file at `config/scouts/tavily_queries.yaml`, bind-mounted
+  read-only into the supervisor container. Edit-and-restart workflow
+  with no rebuilds; failing-fast YAML validation surfaces
+  misconfiguration immediately
+- **Separation of concerns between env vars and config files** in the
+  supervisor: env vars travel with the container (cadence, MCP target,
+  feature flags); YAML files travel with the project and reload on
+  restart (curated content like queries, prompts, ontology). Different
+  lifecycles, different mechanisms — visible in the code by living in
+  separate modules (`schedule.py` vs `config_loader.py`)
+- Designed as **a stepping stone to graph-aware query generation**
+  (Lever 2): the queries source is now a function call (`load_tavily_queries()`)
+  rather than a hardcoded list, so swapping in graph-derived queries
+  is a one-line change in one place
+
 ---
 
 ## To-do
