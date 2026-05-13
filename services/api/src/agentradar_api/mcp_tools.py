@@ -300,7 +300,7 @@ async def get_mention_velocity(
 @mcp.tool
 async def traverse(
     start: str, edge_types: list[str], depth: int = 2
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """
     Multi-hop graph traversal from a starting Concept along the given edge types.
 
@@ -311,14 +311,22 @@ async def traverse(
         depth: Max hop count (1-4, default 2).
 
     Returns:
-        List of paths, each {nodes: [...], relationships: [...]}. Limited to 100.
+        {"start": <str>, "depth": <int>, "edge_types": [...], "paths": [...]}
+        where each path is {nodes: [...], relationships: [...]}.
+        Limited to 100 paths.
     """
     if not edge_types:
-        return []
+        return {
+            "start": start,
+            "depth": depth,
+            "edge_types": [],
+            "paths": [],
+        }
     for et in edge_types:
         if not _CYPHER_IDENT.match(et):
             raise ValueError(f"Invalid edge type {et!r}")
     depth = max(1, min(depth, 4))
+
     edge_pattern = "|".join(f"`{e}`" for e in edge_types)
     cypher = f"""
         MATCH path = (start:Concept {{name: $start}})
@@ -332,7 +340,20 @@ async def traverse(
     async with n.session() as s:
         result = await s.run(cypher, start=start)
         rows = [r async for r in result]
-    return [{"nodes": r["nodes"], "relationships": r["rels"]} for r in rows]
+
+    paths = [
+        {
+            "nodes": [_serialize_neo4j(node) for node in r["nodes"]],
+            "relationships": [_serialize_neo4j(rel) for rel in r["rels"]],
+        }
+        for r in rows
+    ]
+    return {
+        "start": start,
+        "depth": depth,
+        "edge_types": edge_types,
+        "paths": paths,
+    }
 
 
 # ---------------------------------------------------------------------------

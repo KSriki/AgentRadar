@@ -175,7 +175,7 @@ class PgClient:
         self, concept_name: str, window_days: int = 90
     ) -> dict[str, Any]:
         """Weekly mention buckets + a simple slope (mentions/week trend)."""
-        cutoff = datetime.utcnow() - timedelta(days=window_days)
+        cutoff = datetime.now(UTC) - timedelta(days=window_days)
         pool = await self._ensure()
         async with pool.acquire() as conn:
             rows = await conn.fetch(
