@@ -59,18 +59,33 @@ CREATE INDEX mention_events_concept_observed_idx
 -- ---------------------------------------------------------------------------
 -- Forecasts: track predictions for self-calibration
 -- ---------------------------------------------------------------------------
-CREATE TABLE forecasts (
+
+-- Forecasts produced by the Forecaster agent.
+-- Each row is one prediction about one concept, with provenance and
+-- (eventually) Calibrator-graded outcomes.
+CREATE TABLE IF NOT EXISTS forecasts (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     concept_name      TEXT NOT NULL,
     claim             TEXT NOT NULL,
-    confidence        FLOAT NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
-    horizon_months    INT NOT NULL CHECK (horizon_months BETWEEN 1 AND 24),
-    cited_source_ids  TEXT[] NOT NULL,
+    confidence        DOUBLE PRECISION NOT NULL
+                          CHECK (confidence >= 0.0 AND confidence <= 1.0),
+    confidence_band   TEXT NOT NULL DEFAULT 'weak'
+                          CHECK (confidence_band IN ('weak', 'medium', 'high')),
+    horizon_months    INTEGER NOT NULL
+                          CHECK (horizon_months >= 1 AND horizon_months <= 24),
+    reasoning         TEXT NOT NULL DEFAULT '',
+    cited_source_ids  TEXT[] NOT NULL DEFAULT '{}',
+    evidence_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
     predicted_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Calibrator (future): outcome graded after the horizon elapses
     outcome           TEXT CHECK (outcome IN ('hit', 'miss', 'partial')),
     graded_at         TIMESTAMPTZ,
     graded_notes      TEXT
 );
 
-CREATE INDEX forecasts_predicted_at_idx ON forecasts (predicted_at DESC);
-CREATE INDEX forecasts_outcome_idx ON forecasts (outcome) WHERE outcome IS NOT NULL;
+CREATE INDEX IF NOT EXISTS forecasts_predicted_at_idx
+    ON forecasts(predicted_at DESC);
+CREATE INDEX IF NOT EXISTS forecasts_outcome_idx
+    ON forecasts(outcome) WHERE outcome IS NOT NULL;
+CREATE INDEX IF NOT EXISTS forecasts_concept_name_idx
+    ON forecasts(concept_name);

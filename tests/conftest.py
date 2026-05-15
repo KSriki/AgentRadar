@@ -306,6 +306,10 @@ class MockMCPClient:
                 return self._Result({"triple_id": "mock-id", "status": "pending"})
             if name in ("approve_triple", "reject_triple"):
                 return self._Result({"committed": True, "decision": name.split("_")[0] + "d"})
+            if name == "propose_forecast":                                              # <-- new
+                return self._Result({"forecast_id": "mock-forecast-id", "status": "stored"})
+            if name == "list_recent_forecasts":                                         # <-- new (bonus)
+                return self._Result({"forecasts": [], "count": 0})
             raise RuntimeError(f"MockMCPClient: no queued response for tool {name!r}")
         return self._Result(queue.pop(0))
 

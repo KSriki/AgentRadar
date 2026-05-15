@@ -362,6 +362,75 @@
   windows. Same edit-and-restart workflow as Lever 1
 
 
+## ROMA Orchestrator on LangGraph
+
+- Built **ROMA recursive supervisor** as a LangGraph `StateGraph` — the
+  Atomizer → Planner → Executor → Aggregator pattern from the paper,
+  expressed as a compiled state machine with typed state flowing through
+  nodes and conditional edges. Designed as a general orchestration
+  primitive at the supervisor root, with the Forecaster as its first
+  consumer
+- **Typed state schema (`ForecastState`)** with `Annotated[..., operator.add]`
+  reducer fields so multi-path execution (Session 2's composite tasks)
+  merges results cleanly without state-schema changes
+- **Heterogeneous node strategy by design**: Atomizer + routing functions
+  are deterministic Python (no LLM cost on every dispatch); Executor is
+  the only LLM-bound node, where the actual reasoning happens; Aggregator
+  is deterministic (composes results, classifies confidence band). This
+  is the SLM/LLM-tier-per-role principle from the README's NVIDIA-SLM
+  reference, applied at the orchestrator level
+- **Hard recursion cap (`MAX_DEPTH = 3`)** with forced atomicity at the
+  cap — prevents runaway recursion while allowing genuine multi-level
+  decomposition (Session 2 territory)
+- Conscious architectural distinction: **knowledge graph (Neo4j) is
+  what we know; orchestration graph (LangGraph StateGraph) is how we
+  think about what to do next.** Same word, different categories — the
+  README's "graph" prose now refers to both with care
+- Composite-workflow scaffolding present but deliberately unfilled: in
+  Session 1 the Planner returns empty subtasks and routes directly to
+  the Aggregator, so the atomic path is fully exercised without the
+  unfinished recursion logic interfering. Session 2 plugs in real
+  decomposition without touching the graph topology
+
+## Fifth Agent (Forecaster) — Headline Output
+
+- Built **Forecaster agent** consuming the (graph-aware, multi-source)
+  knowledge graph and producing the system's headline output: a
+  structured forecast about a tracked concept with confidence band,
+  horizon, reasoning, and cited evidence. **AgentRadar now does the
+  thing the README promises**: data flows in via four Scouts, the
+  Critic validates, the graph grows, and the Forecaster reads from it
+  to make actual claims about the future
+- **Single-concept atomic workflow (Session 1)**: forecasts one
+  highest-velocity-not-recently-forecasted concept per invocation.
+  Candidate selection is one SQL query against `mention_events` and
+  `forecasts` joined; deliberately narrow so the orchestration shape
+  is validated end-to-end before adding the multi-concept digest
+  (Session 2)
+- **Structured-output pipeline via Pydantic**: the Forecaster's
+  Executor calls the SLM with a JSON-schema prompt, parses the response
+  through a `CandidateForecast` Pydantic model with field-level
+  validation (confidence in [0,1], horizon in [1,24] months). Markdown-
+  fenced JSON from smaller models is handled defensively
+- **Graceful degradation when the SLM stumbles**: if the model emits
+  unparseable JSON, the Aggregator's weak-fallback produces an
+  "Insufficient signal to forecast" row with `confidence_band='weak'`
+  and `confidence=0.0` rather than crashing. The pipeline always
+  completes; the dashboard always has data; the failure mode is
+  honest about itself
+- **MCP persistence with provenance**: new `propose_forecast` and
+  `list_recent_forecasts` tools wire the Forecaster's output into the
+  existing storage layer. The forecasts table carries `confidence_band`,
+  `reasoning`, `cited_source_ids`, `evidence_snapshot`, and
+  `predicted_at` — enough provenance for the Calibrator (future) to
+  grade fairly months later
+- **Pluggable model tier**: Session 1 uses Ollama's `llama3.2:3b`
+  locally for everything; the Forecaster's interface to the SLM is
+  identical to what Bedrock-served Claude would expose, so swapping
+  in `BEDROCK_FORECASTER_MODEL_ID` (Session 2) is a config change,
+  not a code change. Today the Forecaster ships forecasts on a
+  hobbyist's laptop with zero API costs
+
 ---
 
 
@@ -374,8 +443,12 @@
 - ~~Config-driven Scout queries (Lever 1)~~ ✓
 - ~~Graph-aware query generation (Lever 2)~~ ✓
 - ~~TrendScout (Lever 3): GitHub, HN, lab RSS~~ ✓
-- Forecaster + first weekly digest output ← NEXT
+- ~~Comprehensive testing: ~200 unit tests + ~40 integration tests~~ ✓
+- ~~ROMA orchestrator on LangGraph (Forecaster's first workflow)~~ ✓
+- ~~Forecaster Session 1: single-concept atomic forecasts~~ ✓
+- Forecaster Session 2: composite digest workflow (top-N forecasts via recursion)
+- Bedrock fallback for Forecaster (BEDROCK_FORECASTER_MODEL_ID)
+- Dashboard widget surfacing live forecasts ← NEXT
 - Calibrator with Brier-score back-grading
-- ROMA supervisor in LangGraph (recursive multi-agent tasks)
 - Backtest: pre-MCP-launch (Nov 2024) data → does the system flag MCP?
 - Terraform module for AWS ECS Fargate deployment

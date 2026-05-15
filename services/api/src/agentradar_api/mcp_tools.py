@@ -18,6 +18,7 @@ import re
 from datetime import datetime
 from typing import Any
 from uuid import UUID
+import json
 
 from fastmcp import FastMCP
 
@@ -395,4 +396,109 @@ async def healthcheck() -> dict[str, bool]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Forecasting Agent
+# ---------------------------------------------------------------------------
+
+@mcp.tool
+async def propose_forecast(
+    concept_name: str,
+    claim: str,                      # was 'prediction' in my earlier code
+    confidence: float,
+    confidence_band: str,
+    horizon_months: int = 6,         # NEW — required by existing schema
+    reasoning: str = "",
+    cited_source_ids: list[str] | None = None,    # was 'cited_concept_ids'
+    evidence_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Persist a forecast to the forecasts table.
+
+    Args:
+        concept_name: The concept being forecasted.
+        claim: The prediction text.
+        confidence: 0.0–1.0 self-assessed confidence.
+        confidence_band: 'weak' | 'medium' | 'high'.
+        horizon_months: 1–24 months out. Defaults to 6.
+        reasoning: Why the Forecaster made this prediction.
+        cited_source_ids: Source/concept IDs the prediction cites.
+        evidence_snapshot: JSON dump of the evidence the Forecaster saw.
+
+    Returns:
+        {"forecast_id": str, "status": "stored"}
+    """
+    if not concept_name.strip():
+        raise ValueError("concept_name required")
+    if not claim.strip():
+        raise ValueError("claim required")
+    if not (0.0 <= confidence <= 1.0):
+        raise ValueError(f"confidence must be in [0,1], got {confidence}")
+    if confidence_band not in ("weak", "medium", "high"):
+        raise ValueError(
+            f"confidence_band must be weak|medium|high, got {confidence_band!r}"
+        )
+    if not (1 <= horizon_months <= 24):
+        raise ValueError(f"horizon_months must be in [1,24], got {horizon_months}")
+
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO forecasts
+                (concept_name, claim, confidence, confidence_band,
+                 horizon_months, reasoning, cited_source_ids,
+                 evidence_snapshot, predicted_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+            RETURNING id
+            """,
+            concept_name,
+            claim,
+            confidence,
+            confidence_band,
+            horizon_months,
+            reasoning,
+            cited_source_ids or [],
+            json.dumps(evidence_snapshot or {}),
+        )
+    return {"forecast_id": str(row["id"]), "status": "stored"}
+
+
+@mcp.tool
+async def list_recent_forecasts(limit: int = 10) -> dict[str, Any]:
+    """
+    Return the most recent forecasts. Used by the dashboard.
+    """
+    limit = max(1, min(limit, 100))
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, concept_name, claim, confidence, confidence_band,
+                   horizon_months, reasoning, cited_source_ids, predicted_at,
+                   outcome, graded_at
+            FROM forecasts
+            ORDER BY predicted_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    forecasts = [
+        {
+            "forecast_id": str(r["id"]),
+            "concept_name": r["concept_name"],
+            "claim": r["claim"],
+            "confidence": r["confidence"],
+            "confidence_band": r["confidence_band"],
+            "horizon_months": r["horizon_months"],
+            "reasoning": r["reasoning"],
+            "cited_source_ids": list(r["cited_source_ids"] or []),
+            "predicted_at": r["predicted_at"].isoformat(),
+            "outcome": r["outcome"],
+            "graded_at": r["graded_at"].isoformat() if r["graded_at"] else None,
+        }
+        for r in rows
+    ]
+    return {"forecasts": forecasts, "count": len(forecasts)}
 
