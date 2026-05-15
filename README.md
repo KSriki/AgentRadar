@@ -77,10 +77,10 @@ system's track record on its own predictions becomes a measurable artifact.
   proxies API and MCP traffic
 - **dashboard** — Vite-served React app with hot-reload through the proxy
 - **api** — FastAPI hosting both REST endpoints and the fastmcp tool surface
-- **supervisor** — long-running asyncio scheduler that fires Scout every
-  2 hours and Critic every 15 minutes (env-overridable). Connects to the
-  api's MCP endpoint on a persistent client; new trace_id per agent run
-  for full forensic logging
+- **supervisor** — long-running asyncio scheduler firing arXiv Scout
+  (2h), Tavily Scout (6h), TrendScout (6h), Critic (15m), and
+  Forecaster (weekly). Env-overridable cadences; persistent MCP
+  session; per-run trace_id for forensic logging
 - **neo4j**, **postgres** (with pgvector), **minio** — the data plane
 - **Ollama on host** — Llama 3.2 3B for narrow agent tasks (Scout's concept
   extraction, Critic's faithfulness validation)
@@ -133,46 +133,58 @@ what differentiates a forecast you can trust from one you can't.
 
 ## Architecture
 
-                    ┌─────────────────────────────────────┐
-                    │  Supervisor (asyncio scheduler)     │
-                    │  Scout → 2h · Critic → 15m          │
-                    │  env-driven cadence, graceful SIGTERM│
-                    └────────────┬────────────────────────┘
-                                 │ MCP (HTTP)
+```
+                    ┌──────────────────────────────────────────┐
+                    │  Supervisor (asyncio scheduler)           │
+                    │  4 Scouts · Critic · Forecaster           │
+                    │  env-driven cadence, graceful SIGTERM     │
+                    │  per-run trace_id for forensic logs       │
+                    └────────────┬─────────────────────────────┘
+                                 │ MCP (HTTP, persistent session)
                        ┌─────────▼──────────┐
                        │   FastAPI + MCP    │
                        │  REST + tool layer │
                        └─────────┬──────────┘
                                  │
-       ┌──────────────┬──────────┼──────────┬──────────────────┐
-       ▼              ▼          ▼          ▼                  ▼
-  ┌─────────┐    ┌────────┐ ┌────────┐ ┌────────┐         ┌──────────┐
-  │  Scout  │    │ Critic │ │ Future │ │ Future │   ...   │ Future   │
-  │ (arXiv) │    │        │ │ Scouts │ │Forecast│         │Calibrator│
-  └─────────┘    └────────┘ └────────┘ └────────┘         └──────────┘
-       │              │          │          │                  │
-       └──────────────┴──────────┴──────────┴──────────────────┘
+   ┌──────────┬──────────┬───────┼───────┬──────────┬────────────┐
+   ▼          ▼          ▼       ▼       ▼          ▼            ▼
+ ┌──────┐ ┌──────┐ ┌──────────┐ ┌──────┐ ┌──────┐ ┌─────────┐ ┌──────────┐
+ │Scout │ │Scout │ │  Scout   │ │Critic│ │Fore- │ │ROMA     │ │Calibrator│
+ │arXiv │ │Tavily│ │TrendScout│ │ (3   │ │caster│ │ Lang-   │ │ (planned)│
+ │(SLM) │ │(SLM) │ │github+hn │ │stage)│ │(LLM) │ │ Graph   │ │          │
+ │      │ │      │ │+lab_rss  │ │(LLM) │ │      │ │ State-  │ │          │
+ │      │ │      │ │  (SLM)   │ │      │ │      │ │ Graph)  │ │          │
+ └──┬───┘ └──┬───┘ └─────┬────┘ └──┬───┘ └──┬───┘ └────┬────┘ └────┬─────┘
+    │        │           │         │        │          │           │
+    └────────┴───────────┴─────────┴────────┴──────────┴───────────┘
                                  │
-                       ┌─────────▼─────────┐
-                       │   MCP Tool Layer  │
-                       │ • Neo4j           │
-                       │ • pgvector        │
-                       │ • S3 (MinIO)      │
-                       │ • SLM (Ollama)    │
-                       └─────────┬─────────┘
+                       ┌─────────▼──────────┐
+                       │   MCP Tool Layer   │
+                       │ • Neo4j (graph)    │
+                       │ • Postgres (queue) │
+                       │ • pgvector (HNSW)  │
+                       │ • S3 (MinIO)       │
+                       │ • SLM (Ollama)     │
+                       │ • Tavily, GitHub,  │
+                       │   HN, lab feeds    │
+                       └─────────┬──────────┘
                                  │
-                  ┌──────────────▼──────────────┐
-                  │    Knowledge Store          │
-                  │ Neo4j: typed graph          │
-                  │ pgvector: embeddings        │
-                  │ S3:    raw artifacts        │
-                  └─────────────────────────────┘
+              ┌──────────────────▼──────────────────┐
+              │       Knowledge Store               │
+              │ Neo4j: typed graph w/ temporal      │
+              │   edges (Concept, Authority,        │
+              │   Source, Forecast)                 │
+              │ Postgres: pending queue, mentions,  │
+              │   forecasts; pgvector HNSW          │
+              │ S3:    raw artifacts                │
+              └─────────────────────────────────────┘
 
    Reverse proxy (nginx :80)
-     /         → React dashboard
+     /         → React dashboard (forecasts widget WIP)
      /api/*    → REST endpoints
      /mcp      → fastmcp Streamable HTTP
      /docs     → FastAPI Swagger
+```
 
 ### The agents
 
@@ -259,13 +271,13 @@ agentradar/
 │   └── agentradar-store/       # async clients: Neo4j, Postgres, S3, embeddings
 │
 ├── services/                   # runnable applications
-│   ├── mcp-server/             # exposes the knowledge store as MCP tools
-│   ├── supervisor/             # ROMA supervisor + the six agents
-│   └── api/                    # FastAPI for the dashboard
+│   ├── api/                    # FastAPI + fastmcp tool surface
+│   └── supervisor/             # ROMA orchestrator + five agents:
+│                               # arXiv/Tavily/Trend Scouts, Critic, Forecaster
 │
-├── apps/dashboard/             # Next.js dashboard (planned)
+├── apps/dashboard/             # React + Vite dashboard
 └── tests/
-    ├── unit/                   # pure logic, no network
+    ├── unit/                   # pure logic, mocked externals
     └── integration/            # against the docker-compose data plane
 ```
 
@@ -315,14 +327,21 @@ docker compose exec postgres psql -U agentradar -d agentradar -c '\dt'
 - [x] Structured logging with contextvar-based trace propagation
 - [x] MCP server exposing the knowledge store as tools
 - [x] First Scout (arXiv) end-to-end through the proposer-critic loop
-- [x] Critic agent with three-stage validation (structural → ontology → faithfulness)
+- [x] Critic with three-stage validation (structural → ontology → faithfulness)
 - [x] Operational dashboard with single-port nginx reverse proxy
-- [x] Supervisor with env-driven schedule, autonomous Scout↔Critic loop
-- [ ] ROMA supervisor wired into LangGraph for complex multi-agent tasks
-- [ ] Forecaster generating first weekly digest
+- [x] Autonomous supervisor: env-driven schedule, Scout↔Critic loop
+- [x] Second Scout (Tavily) + multi-source Critic dispatch
+- [x] Config-driven Scout queries (YAML, edit-and-restart)
+- [x] Graph-aware query generation (corroboration, spike, adjacency strategies)
+- [x] TrendScout watching GitHub Search API + HN Algolia + lab RSS feeds
+- [x] Comprehensive testing: ~200 unit tests + ~40 integration tests
+- [x] ROMA orchestrator on LangGraph (StateGraph with depth cap)
+- [x] Forecaster Session 1: single-concept atomic forecasts with confidence bands
+- [ ] Forecaster Session 2: composite digest workflow (top-N via recursion)
+- [ ] Bedrock fallback for Forecaster (BEDROCK_FORECASTER_MODEL_ID)
+- [ ] Dashboard widget surfacing live forecasts
 - [ ] Calibrator with Brier-score back-grading
-- [ ] Additional Scouts: GitHub orgs, lab blogs, RFC drafts
-- [ ] Backtest: feed pre-MCP-launch data, see if the system flags MCP
+- [ ] Backtest: pre-MCP-launch data → does the system flag MCP?
 - [ ] Terraform module for AWS ECS Fargate deployment
 ## Design decisions worth reading about
 
@@ -343,6 +362,23 @@ notes that explain the non-obvious choices:
   with monotonic timing, stagger-on-startup, graceful shutdown, persistent
   MCP session. ~200 lines of Python; easily replaced with APScheduler or
   external cron when scale demands it
+- *Two distinct "graphs" in one system* — the knowledge graph (Neo4j,
+  what we know) is categorically different from the orchestration graph
+  (LangGraph StateGraph, how we decide what to do). Sharing a word is
+  unfortunate; the README is explicit about the distinction
+- *Graph-aware query generation* — Scout queries derived from current
+  graph state (corroboration, velocity spikes, top authorities). The
+  system's curiosity is informed by what it already knows. Moves
+  AgentRadar from "agent system executing prescribed searches" to
+  "agent system whose curiosity is informed by what it already knows"
+- *Heterogeneous source adapters under a uniform Scout* — TrendScout
+  proves the Agent Protocol scales to wildly different source shapes
+  (REST search APIs, Algolia, RSS) by funneling them all through a
+  TrendItem common shape
+- *Per-source error isolation validated under real-world flakiness* —
+  four of nine sources had transient HTTP issues on first deployment;
+  the supervisor stayed up, individual fixes were single-file edits,
+  the architecture didn't bend
 
 ## References
 
