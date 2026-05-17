@@ -431,6 +431,48 @@
   not a code change. Today the Forecaster ships forecasts on a
   hobbyist's laptop with zero API costs
 
+## Architectural Maturity Under Real-World Stress
+
+These aren't headline features — they're the lessons that distinguish
+"system that works in dev" from "system that ships."
+
+- **Identified and fixed an event-loop affinity bug** in the autonomous
+  loop: the supervisor's per-tick MCP session pattern (correct for
+  fastmcp session-id lifecycle) inadvertently broke any code path that
+  touched the module-level PgClient singleton across event loops.
+  Resolved by routing all DB access through MCP tools; stateless HTTP
+  clients (SLM, Tavily) can stay direct. The general principle:
+  **stateful clients with internal asyncio primitives have event-loop
+  affinity; stateless HTTP clients don't.** Documented this distinction
+  in code comments so future agents follow the right pattern.
+- **Structured outputs via Ollama's JSON-schema constraint** instead
+  of prompt engineering. The Forecaster's first run produced
+  `{"prediction": {"set", "literal", "syntax"}}` — invalid JSON, set
+  literals where strings were expected, because llama3.2:3b interpreted
+  the prompt's "3, 6, 12 month horizons" too literally. Fix wasn't a
+  better prompt; it was constraining the decoder via Ollama's `format`
+  parameter so even small models reliably emit valid JSON. Architectural
+  lesson: prompting small models for structure is unreliable; runtime
+  constraint is reliable.
+- **fastmcp session lifecycle handled correctly**: persistent sessions
+  die when the api restarts, leaving the supervisor stuck in a
+  reconnect-404-reconnect loop. Fixed by scoping MCP sessions per
+  scheduled job rather than per supervisor lifetime — session death
+  is contained to one tick; next tick gets a fresh session
+  automatically. ~50ms handshake overhead per tick traded for full
+  resilience.
+- **fastmcp strict-mode output validation** rejects bare list/None
+  returns from tools, even when the tool's logic succeeds. Pattern:
+  always return structured envelopes (e.g., `{"paths": [...]}` not
+  `[...]`, `{"concept_name": null}` not bare null). Same fix pattern
+  applied to `get_concept`, `traverse`, `select_forecast_candidate`.
+- **Direct DB access from agent code is a smell.** The Forecaster's
+  initial implementation hit `pg.mention_velocity()` and `pool.acquire()`
+  directly because it felt natural for a SQL-heavy agent. Refactored
+  to use new `get_forecast_evidence` MCP tool. The architectural rule
+  now consistent across all five agents: state access through the
+  tool layer, no exceptions.
+
 ---
 
 
