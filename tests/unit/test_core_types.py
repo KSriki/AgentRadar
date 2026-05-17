@@ -7,8 +7,6 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from agentradar_core import (
     ConceptType,
     Forecast,
@@ -19,6 +17,7 @@ from agentradar_core import (
     Triple,
     TripleStatus,
 )
+from pydantic import ValidationError
 
 
 class TestEnums:
@@ -49,17 +48,13 @@ class TestForecastConfidence:
             (1.0, ForecastConfidence.HIGH),
         ],
     )
-    def test_band_thresholds(
-        self, score: float, expected: ForecastConfidence
-    ) -> None:
+    def test_band_thresholds(self, score: float, expected: ForecastConfidence) -> None:
         assert ForecastConfidence.from_score(score) == expected
 
 
 class TestSource:
     def test_source_is_immutable(self) -> None:
-        src = Source(
-            id="abc", type=SourceType.ARXIV, observed_at=datetime.now(UTC)
-        )
+        src = Source(id="abc", type=SourceType.ARXIV, observed_at=datetime.now(UTC))
         with pytest.raises(ValidationError):
             src.id = "different"  # type: ignore[misc]
 
@@ -81,20 +76,32 @@ class TestTriple:
     def test_confidence_bounds_enforced(self) -> None:
         with pytest.raises(ValidationError):
             Triple(
-                subject="A", predicate="X", object="B",
-                source_id="s1", confidence=1.5, proposer_agent="scout",
+                subject="A",
+                predicate="X",
+                object="B",
+                source_id="s1",
+                confidence=1.5,
+                proposer_agent="scout",
             )
         with pytest.raises(ValidationError):
             Triple(
-                subject="A", predicate="X", object="B",
-                source_id="s1", confidence=-0.1, proposer_agent="scout",
+                subject="A",
+                predicate="X",
+                object="B",
+                source_id="s1",
+                confidence=-0.1,
+                proposer_agent="scout",
             )
 
     def test_confidence_endpoints_allowed(self) -> None:
         for c in (0.0, 1.0):
             t = Triple(
-                subject="A", predicate="X", object="B",
-                source_id="s1", confidence=c, proposer_agent="scout",
+                subject="A",
+                predicate="X",
+                object="B",
+                source_id="s1",
+                confidence=c,
+                proposer_agent="scout",
             )
             assert t.confidence == c
 
@@ -103,9 +110,14 @@ class TestPendingTriple:
     def test_inherits_triple_validation(self) -> None:
         with pytest.raises(ValidationError):
             PendingTriple(
-                id=uuid4(), proposal_hash="h",
-                subject="A", predicate="X", object="B",
-                source_id="s1", confidence=2.0, proposer_agent="scout",
+                id=uuid4(),
+                proposal_hash="h",
+                subject="A",
+                predicate="X",
+                object="B",
+                source_id="s1",
+                confidence=2.0,
+                proposer_agent="scout",
                 created_at=datetime.now(UTC),
             )
 
@@ -113,9 +125,11 @@ class TestPendingTriple:
 class TestForecast:
     def test_confidence_band_property(self) -> None:
         f = Forecast(
-            id=uuid4(), concept_name="MCP",
+            id=uuid4(),
+            concept_name="MCP",
             claim="MCP will see major-cloud reference impls",
-            confidence=0.85, horizon_months=3,
+            confidence=0.85,
+            horizon_months=3,
             cited_source_ids=["s1", "s2"],
             predicted_at=datetime.now(UTC),
         )
@@ -124,13 +138,21 @@ class TestForecast:
     def test_horizon_months_bounds(self) -> None:
         with pytest.raises(ValidationError):
             Forecast(
-                id=uuid4(), concept_name="X", claim="...", confidence=0.5,
+                id=uuid4(),
+                concept_name="X",
+                claim="...",
+                confidence=0.5,
                 horizon_months=0,  # below min
-                cited_source_ids=[], predicted_at=datetime.now(UTC),
+                cited_source_ids=[],
+                predicted_at=datetime.now(UTC),
             )
         with pytest.raises(ValidationError):
             Forecast(
-                id=uuid4(), concept_name="X", claim="...", confidence=0.5,
+                id=uuid4(),
+                concept_name="X",
+                claim="...",
+                confidence=0.5,
                 horizon_months=25,  # above max
-                cited_source_ids=[], predicted_at=datetime.now(UTC),
+                cited_source_ids=[],
+                predicted_at=datetime.now(UTC),
             )

@@ -11,12 +11,13 @@ Design:
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
-
-from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncSession
+from typing import Any
 
 from agentradar_core import Neo4jSettings, get_logger, settings
+
+from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncSession
 
 log = get_logger(__name__)
 
@@ -143,10 +144,8 @@ class Neo4jClient:
         except Exception as exc:
             log.warning("neo4j.healthcheck_failed", error=str(exc))
             return False
-        
-    async def list_top_authorities(
-        self, limit: int = 5
-    ) -> list[dict[str, Any]]:
+
+    async def list_top_authorities(self, limit: int = 5) -> list[dict[str, Any]]:
         """
         Authorities (orgs/labs) that introduced the most concepts we track.
         These are high-yield targets for adjacency queries: 'what else

@@ -10,7 +10,6 @@ touch I/O.
 from __future__ import annotations
 
 import pytest
-
 from agentradar_supervisor.nodes import (
     MAX_DEPTH,
     _aggregate_concept,
@@ -18,7 +17,6 @@ from agentradar_supervisor.nodes import (
     route_after_atomize,
     route_after_plan,
 )
-
 
 # ---- Atomizer -------------------------------------------------------------
 
@@ -76,25 +74,31 @@ class TestRouting:
 
 # ---- Aggregator ----------------------------------------------------------
 
+
 class TestAggregate:
     """Confidence banding and weak-fallback behavior. Targets
     _aggregate_concept directly (the sync sub-aggregator) rather than
     the async top-level dispatch."""
 
-    @pytest.mark.parametrize("confidence,expected_band", [
-        (0.0, "weak"),
-        (0.39, "weak"),
-        (0.4, "medium"),
-        (0.69, "medium"),
-        (0.7, "high"),
-        (1.0, "high"),
-    ])
+    @pytest.mark.parametrize(
+        "confidence,expected_band",
+        [
+            (0.0, "weak"),
+            (0.39, "weak"),
+            (0.4, "medium"),
+            (0.69, "medium"),
+            (0.7, "high"),
+            (1.0, "high"),
+        ],
+    )
     def test_confidence_band_thresholds(self, confidence, expected_band):
         state = {
             "task": {"kind": "forecast.concept", "concept_name": "X"},
             "candidate_forecast": {
-                "prediction": "p", "confidence": confidence,
-                "reasoning": "r", "cited_concept_ids": [],
+                "prediction": "p",
+                "confidence": confidence,
+                "reasoning": "r",
+                "cited_concept_ids": [],
             },
             "evidence": {},
         }
@@ -118,7 +122,9 @@ class TestAggregate:
         state = {
             "task": {"kind": "forecast.concept", "concept_name": "TargetConcept"},
             "candidate_forecast": {
-                "prediction": "p", "confidence": 0.5, "reasoning": "r",
+                "prediction": "p",
+                "confidence": 0.5,
+                "reasoning": "r",
                 "cited_concept_ids": ["A", "B"],
             },
             "evidence": {"x": 1},
@@ -133,7 +139,8 @@ class TestAggregate:
         state = {
             "task": {"kind": "forecast.concept", "concept_name": "X"},
             "candidate_forecast": {
-                "prediction": "p", "confidence": 0.5,
+                "prediction": "p",
+                "confidence": 0.5,
                 "reasoning": "Multi-source convergence detected",
                 "cited_concept_ids": [],
             },

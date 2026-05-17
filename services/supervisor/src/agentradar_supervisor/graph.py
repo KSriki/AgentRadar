@@ -19,9 +19,9 @@ instead. ROMA earns its keep on the Forecaster, not the scheduler.
 
 from __future__ import annotations
 
+from agentradar_core import get_logger
 from langgraph.graph import END, START, StateGraph
 
-from agentradar_core import get_logger
 from agentradar_supervisor.nodes import (
     aggregate,
     atomize,

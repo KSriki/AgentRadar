@@ -12,7 +12,6 @@ import asyncio
 import uuid
 
 import pytest
-
 from agentradar_core import Triple, TripleStatus
 
 
@@ -50,10 +49,14 @@ class TestRaceSemantics:
         triple_id = uuid.UUID(proposal["triple_id"])
 
         ok1 = await clean_pg.mark_triple_decided(
-            triple_id, TripleStatus.APPROVED, None,
+            triple_id,
+            TripleStatus.APPROVED,
+            None,
         )
         ok2 = await clean_pg.mark_triple_decided(
-            triple_id, TripleStatus.REJECTED, "overriding approve",
+            triple_id,
+            TripleStatus.REJECTED,
+            "overriding approve",
         )
 
         assert ok1 is True
@@ -62,7 +65,8 @@ class TestRaceSemantics:
         pool = await clean_pg._ensure()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT status FROM pending_triples WHERE id = $1", triple_id,
+                "SELECT status FROM pending_triples WHERE id = $1",
+                triple_id,
             )
         assert row["status"] == "approved"
 
@@ -74,10 +78,9 @@ class TestRaceSemantics:
             p = await clean_pg.propose_triple(_t(f"S{i}", f"src:multi:{i}"))
             triple_ids.append(uuid.UUID(p["triple_id"]))
 
-        results = await asyncio.gather(*[
-            clean_pg.mark_triple_decided(tid, TripleStatus.APPROVED, None)
-            for tid in triple_ids
-        ])
+        results = await asyncio.gather(
+            *[clean_pg.mark_triple_decided(tid, TripleStatus.APPROVED, None) for tid in triple_ids]
+        )
 
         assert all(results)
 
@@ -92,6 +95,8 @@ class TestRaceSemantics:
     async def test_decide_nonexistent_triple_returns_false(self, clean_pg):
         bogus_id = uuid.uuid4()
         ok = await clean_pg.mark_triple_decided(
-            bogus_id, TripleStatus.APPROVED, None,
+            bogus_id,
+            TripleStatus.APPROVED,
+            None,
         )
         assert ok is False

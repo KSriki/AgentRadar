@@ -14,10 +14,11 @@ By default, integration and aws tests are skipped. Enable them with:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator, Iterator
+from contextlib import suppress
 
 import pytest
-
 
 # ---- mark registration -----------------------------------------------------
 
@@ -40,9 +41,7 @@ def pytest_configure(config: pytest.Config) -> None:
 # ---- default mark filtering ------------------------------------------------
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """
     By default, skip integration + aws tests. To run them, pass an explicit
     -m selector on the command line (which makes config.getoption('markexpr')
@@ -53,12 +52,8 @@ def pytest_collection_modifyitems(
     skip_integration = pytest.mark.skip(
         reason="integration test (run with: uv run pytest -m integration)"
     )
-    skip_aws = pytest.mark.skip(
-        reason="aws test (run with: uv run pytest -m aws)"
-    )
-    skip_slow = pytest.mark.skip(
-        reason="slow test (run with: uv run pytest -m slow)"
-    )
+    skip_aws = pytest.mark.skip(reason="aws test (run with: uv run pytest -m aws)")
+    skip_slow = pytest.mark.skip(reason="slow test (run with: uv run pytest -m slow)")
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
@@ -89,12 +84,23 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[pytest.MonkeyPatch]:
     the test only sees explicit values, not whatever happens to be in your shell.
     """
     for key in [
-        "ENVIRONMENT", "LOG_LEVEL",
-        "NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD",
+        "ENVIRONMENT",
+        "LOG_LEVEL",
+        "NEO4J_URI",
+        "NEO4J_USER",
+        "NEO4J_PASSWORD",
         "POSTGRES_DSN",
-        "S3_ENDPOINT_URL", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET", "S3_REGION",
-        "AWS_REGION", "BEDROCK_MODEL_ID", "BEDROCK_CRITIC_MODEL_ID",
-        "EMBEDDING_PROVIDER", "EMBEDDING_MODEL_ID", "EMBEDDING_DIM",
+        "S3_ENDPOINT_URL",
+        "S3_ACCESS_KEY",
+        "S3_SECRET_KEY",
+        "S3_BUCKET",
+        "S3_REGION",
+        "AWS_REGION",
+        "BEDROCK_MODEL_ID",
+        "BEDROCK_CRITIC_MODEL_ID",
+        "EMBEDDING_PROVIDER",
+        "EMBEDDING_MODEL_ID",
+        "EMBEDDING_DIM",
     ]:
         monkeypatch.delenv(key, raising=False)
     yield monkeypatch
@@ -106,32 +112,38 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[pytest.MonkeyPatch]:
 @pytest.fixture
 async def neo4j_client() -> AsyncIterator:
     from agentradar_store import get_neo4j_client
+
     client = get_neo4j_client()
     await client.connect()
     yield client
     await client.close()
     # Reset the module-level singleton so the next test gets a fresh instance.
     import agentradar_store.neo4j_client as mod
+
     mod._singleton = None
 
 
 @pytest.fixture
 async def pg_client() -> AsyncIterator:
     from agentradar_store import get_pg_client
+
     client = get_pg_client()
     await client.connect()
     yield client
     await client.close()
     import agentradar_store.pg_client as mod
+
     mod._singleton = None
 
 
 @pytest.fixture
 async def s3_client() -> AsyncIterator:
     from agentradar_store import get_s3_client
+
     client = get_s3_client()
     yield client
     import agentradar_store.s3_client as mod
+
     mod._singleton = None
 
 
@@ -141,9 +153,11 @@ async def s3_client() -> AsyncIterator:
 @pytest.fixture
 async def clean_neo4j(neo4j_client) -> AsyncIterator:
     """Wipe the test Neo4j database before AND after each test using this fixture."""
+
     async def _wipe():
         async with neo4j_client.session() as s:
             await s.run("MATCH (n) DETACH DELETE n")
+
     await _wipe()
     yield neo4j_client
     await _wipe()
@@ -152,13 +166,14 @@ async def clean_neo4j(neo4j_client) -> AsyncIterator:
 @pytest.fixture
 async def clean_pg(pg_client) -> AsyncIterator:
     """Truncate test-relevant Postgres tables before AND after each test."""
+
     async def _wipe():
         pool = await pg_client._ensure()
         async with pool.acquire() as conn:
             await conn.execute(
-                "TRUNCATE pending_triples, mention_events, concept_embeddings "
-                "RESTART IDENTITY"
+                "TRUNCATE pending_triples, mention_events, concept_embeddings " "RESTART IDENTITY"
             )
+
     await _wipe()
     yield pg_client
     await _wipe()
@@ -185,10 +200,14 @@ class MockSLMClient:
         max_tokens: int | None = None,
         temperature: float | None = None,
     ) -> str:
-        self.calls.append({
-            "system": system, "user": user,
-            "max_tokens": max_tokens, "temperature": temperature,
-        })
+        self.calls.append(
+            {
+                "system": system,
+                "user": user,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+        )
         if not self.responses:
             raise RuntimeError("MockSLMClient: no more queued responses")
         return self.responses.pop(0)
@@ -220,13 +239,11 @@ def mock_slm(monkeypatch: pytest.MonkeyPatch) -> MockSLMClient:
         "agentradar_supervisor.agents.scout.tavily.get_slm_client",
         "agentradar_supervisor.agents.scout.trends.get_slm_client",
     ]:
-        try:
+        # Module may not be imported yet, or may not import this name —
+        # suppress AttributeError per path independently.
+        with suppress(AttributeError):
             monkeypatch.setattr(module_path, _get_mock)
-        except AttributeError:
-            # Module may not be imported yet, or may not import this name
-            pass
     return mock
-
 
 
 # ---- Mocked Tavily client -------------------------------------------------
@@ -239,11 +256,16 @@ class MockTavilyClient:
         self.search_responses: list[list] = []  # list of result-lists per call
         self.search_calls: list[dict] = []
 
-    async def search(self, query: str, max_results: int | None = None,
-                     search_depth: str | None = None) -> list:
-        self.search_calls.append({
-            "query": query, "max_results": max_results, "search_depth": search_depth,
-        })
+    async def search(
+        self, query: str, max_results: int | None = None, search_depth: str | None = None
+    ) -> list:
+        self.search_calls.append(
+            {
+                "query": query,
+                "max_results": max_results,
+                "search_depth": search_depth,
+            }
+        )
         if not self.search_responses:
             return []
         return self.search_responses.pop(0)
@@ -264,10 +286,8 @@ def mock_tavily(monkeypatch: pytest.MonkeyPatch) -> MockTavilyClient:
         "agentradar_store.get_tavily_client",
         "agentradar_supervisor.agents.scout.tavily.get_tavily_client",
     ]:
-        try:
+        with contextlib.suppress(AttributeError):
             monkeypatch.setattr(module_path, _get_mock)
-        except AttributeError:
-            pass
     return mock
 
 
@@ -293,7 +313,7 @@ class MockMCPClient:
     def queue(self, tool_name: str, data) -> None:
         self.responses.setdefault(tool_name, []).append(data)
 
-    async def call_tool(self, name: str, args: dict) -> "MockMCPClient._Result":
+    async def call_tool(self, name: str, args: dict) -> MockMCPClient._Result:
         self.calls.append({"tool": name, "args": args})
         queue = self.responses.get(name, [])
         if not queue:
@@ -306,9 +326,9 @@ class MockMCPClient:
                 return self._Result({"triple_id": "mock-id", "status": "pending"})
             if name in ("approve_triple", "reject_triple"):
                 return self._Result({"committed": True, "decision": name.split("_")[0] + "d"})
-            if name == "propose_forecast":                                              # <-- new
+            if name == "propose_forecast":  # <-- new
                 return self._Result({"forecast_id": "mock-forecast-id", "status": "stored"})
-            if name == "list_recent_forecasts":                                         # <-- new (bonus)
+            if name == "list_recent_forecasts":  # <-- new (bonus)
                 return self._Result({"forecasts": [], "count": 0})
             if name == "propose_digest":
                 return self._Result({"digest_id": "mock-digest-id", "status": "stored"})
@@ -319,13 +339,15 @@ class MockMCPClient:
             if name == "select_top_n_concepts":
                 return self._Result({"concept_names": []})
             if name == "get_forecast_evidence":
-                return self._Result({
-                    "concept_name": "MockConcept",
-                    "total_mentions": 0,
-                    "source_diversity": 0,
-                    "mentions_by_source": {},
-                    "mention_velocity": {"velocity": 0.0, "buckets": []},
-                })
+                return self._Result(
+                    {
+                        "concept_name": "MockConcept",
+                        "total_mentions": 0,
+                        "source_diversity": 0,
+                        "mentions_by_source": {},
+                        "mention_velocity": {"velocity": 0.0, "buckets": []},
+                    }
+                )
             raise RuntimeError(f"MockMCPClient: no queued response for tool {name!r}")
         return self._Result(queue.pop(0))
 
@@ -333,7 +355,7 @@ class MockMCPClient:
         self._tools_listed = True
         return []
 
-    async def __aenter__(self) -> "MockMCPClient":
+    async def __aenter__(self) -> MockMCPClient:
         return self
 
     async def __aexit__(self, *args) -> None:
@@ -352,13 +374,15 @@ def mock_mcp() -> MockMCPClient:
 @pytest.fixture
 def tmp_yaml(tmp_path):
     """Helper: write a YAML dict to a tmp file and return the path."""
-    import yaml as _yaml
     from pathlib import Path
+
+    import yaml as _yaml
 
     def _write(name: str, content: dict) -> Path:
         p = tmp_path / name
         p.write_text(_yaml.safe_dump(content))
         return p
+
     return _write
 
 
@@ -372,6 +396,7 @@ def reset_settings_singletons(monkeypatch):
     Not autouse — opt in only when needed (most unit tests don't care).
     """
     import agentradar_core.config as cfg_mod
+
     original = cfg_mod.settings
     yield
     cfg_mod.settings = original

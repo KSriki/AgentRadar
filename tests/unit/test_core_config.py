@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from agentradar_core import (
     EmbeddingSettings,
     Neo4jSettings,
     Settings,
 )
+from pydantic import ValidationError
 
 
 class TestNeo4jSettings:
@@ -40,9 +39,7 @@ class TestNeo4jSettings:
 
 
 class TestEmbeddingSettings:
-    def test_provider_validation_rejects_unknown(
-        self, clean_env: pytest.MonkeyPatch
-    ) -> None:
+    def test_provider_validation_rejects_unknown(self, clean_env: pytest.MonkeyPatch) -> None:
         clean_env.setenv("EMBEDDING_PROVIDER", "not_a_real_provider")
         with pytest.raises(ValidationError):
             EmbeddingSettings()

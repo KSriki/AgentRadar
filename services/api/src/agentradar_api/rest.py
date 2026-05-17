@@ -11,15 +11,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
-
 from agentradar_core import get_logger
 from agentradar_store import (
     get_neo4j_client,
     get_pg_client,
-    get_slm_client,
     get_s3_client,
+    get_slm_client,
 )
+from fastapi import APIRouter, HTTPException, Query
 
 log = get_logger(__name__)
 
@@ -73,22 +72,15 @@ async def stats() -> dict[str, int]:
 
     # Neo4j: concept + source counts
     async with n.session() as s:
-        concepts = await (await s.run(
-            "MATCH (c:Concept) RETURN count(c) AS n"
-        )).single()
-        sources = await (await s.run(
-            "MATCH (s:Source) RETURN count(s) AS n"
-        )).single()
-        rels = await (await s.run(
-            "MATCH ()-[r]->() RETURN count(r) AS n"
-        )).single()
+        concepts = await (await s.run("MATCH (c:Concept) RETURN count(c) AS n")).single()
+        sources = await (await s.run("MATCH (s:Source) RETURN count(s) AS n")).single()
+        rels = await (await s.run("MATCH ()-[r]->() RETURN count(r) AS n")).single()
 
     # Postgres: pending queue counts by status
     pool = await p._ensure()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT status, COUNT(*)::int AS n "
-            "FROM pending_triples GROUP BY status"
+            "SELECT status, COUNT(*)::int AS n " "FROM pending_triples GROUP BY status"
         )
     by_status = {r["status"]: r["n"] for r in rows}
 
@@ -160,9 +152,7 @@ async def recent_activity(limit: int = 10) -> list[dict[str, Any]]:
 
 
 @router.get("/top-concepts")
-async def top_concepts(
-    limit: int = 10, window_days: int = 90
-) -> list[dict[str, Any]]:
+async def top_concepts(limit: int = 10, window_days: int = 90) -> list[dict[str, Any]]:
     """
     Top concepts by mention count over the last N days. Velocity is
     computed via the same simple-slope heuristic the Forecaster uses,
@@ -185,19 +175,22 @@ async def top_concepts(
             ORDER BY mentions DESC
             LIMIT $2
             """,
-            cutoff, limit,
+            cutoff,
+            limit,
         )
 
     # Compute velocity per concept via the existing helper
     out = []
     for r in rows:
         v = await p.mention_velocity(r["concept_name"], window_days=window_days)
-        out.append({
-            "concept": r["concept_name"],
-            "mentions": r["mentions"],
-            "velocity": round(v["velocity"], 3),
-            "buckets": v["buckets"],   # weekly counts for sparkline
-        })
+        out.append(
+            {
+                "concept": r["concept_name"],
+                "mentions": r["mentions"],
+                "velocity": round(v["velocity"], 3),
+                "buckets": v["buckets"],  # weekly counts for sparkline
+            }
+        )
     return out
 
 
@@ -234,6 +227,7 @@ async def concept_detail(name: str) -> dict[str, Any]:
 # --------------------------------------------
 # Forecaster
 # ---------------------------------––---------
+
 
 @router.get("/forecasts/recent")
 async def forecasts_recent(limit: int = Query(10, ge=1, le=50)) -> list[dict]:

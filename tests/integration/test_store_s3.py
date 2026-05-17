@@ -6,7 +6,6 @@ import uuid
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -25,9 +24,7 @@ class TestS3Healthcheck:
 class TestPutAndGet:
     async def test_round_trip_bytes(self, s3_client, unique_key) -> None:
         payload = b"the rain in spain falls mainly on the plain"
-        uri = await s3_client.put_artifact(
-            unique_key, payload, content_type="text/plain"
-        )
+        uri = await s3_client.put_artifact(unique_key, payload, content_type="text/plain")
         assert uri == f"s3://{s3_client._cfg.bucket}/{unique_key}"
 
         got = await s3_client.get_artifact(unique_key)
@@ -46,6 +43,7 @@ class TestPutAndGet:
 
     async def test_get_missing_key_raises(self, s3_client) -> None:
         from botocore.exceptions import ClientError
+
         with pytest.raises(ClientError) as exc_info:
             await s3_client.get_artifact(f"definitely-missing/{uuid.uuid4().hex}")
         assert exc_info.value.response["Error"]["Code"] == "NoSuchKey"

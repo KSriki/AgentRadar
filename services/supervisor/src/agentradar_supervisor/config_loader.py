@@ -12,8 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
 from agentradar_core import get_logger, settings
+
 from agentradar_supervisor.query_planner import derive_tavily_queries
 
 log = get_logger(__name__)
@@ -41,9 +41,7 @@ def _load_static_queries() -> list[str]:
         raise ValueError(f"Tavily queries file is not valid YAML: {path}") from exc
 
     if not isinstance(data, dict) or "queries" not in data:
-        raise ValueError(
-            f"Tavily queries file must contain a top-level 'queries' list: {path}"
-        )
+        raise ValueError(f"Tavily queries file must contain a top-level 'queries' list: {path}")
 
     queries = data["queries"]
     if not isinstance(queries, list) or not queries:
@@ -84,6 +82,8 @@ async def load_tavily_queries(include_derived: bool = True) -> list[str]:
     combined = static + [q for q in derived if q not in static_set]
     log.info(
         "scout.queries_combined",
-        static=len(static), derived=len(derived), total=len(combined),
+        static=len(static),
+        derived=len(derived),
+        total=len(combined),
     )
     return combined

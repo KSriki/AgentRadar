@@ -18,7 +18,7 @@ __all__ = [
     "get_s3_client",
     "SLMClient",
     "get_slm_client",
-     "TavilyResearchClient",
+    "TavilyResearchClient",
     "TavilyResult",
-    "get_tavily_client"
+    "get_tavily_client",
 ]

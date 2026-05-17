@@ -1,5 +1,8 @@
 # AgentRadar
 
+[![CI](https://github.com/KSriki/AgentRadar/actions/workflows/ci.yml/badge.svg)](https://github.com/KSriki/AgentRadar/actions/workflows/ci.yml)
+[![Integration](https://github.com/KSriki/AgentRadar/actions/workflows/integration.yml/badge.svg)](https://github.com/KSriki/AgentRadar/actions/workflows/integration.yml)
+
 > **Autonomous agentic knowledge management for the agentic AI ecosystem itself.**
 >
 > AgentRadar is a multi-agent system that maintains a living knowledge graph of
@@ -397,6 +400,33 @@ This is a personal portfolio project, but issues and PRs are welcome — especia
 - Improvements to the velocity / convergence detection heuristics
 - Better evaluation harnesses for the Forecaster
 - Backtest datasets
+
+## Development
+
+Pre-commit hooks run linting, formatting, and file-hygiene checks
+locally before each commit. Set them up once after cloning:
+
+```bash
+uv run pre-commit install
+```
+
+Bypass in emergencies only:
+
+```bash
+git commit --no-verify
+```
+
+Run the full hook suite manually:
+
+```bash
+uv run pre-commit run --all-files
+```
+
+CI runs unit tests on every PR (`.github/workflows/ci.yml`) and
+integration tests against the docker-compose data plane on merges
+to main (`.github/workflows/integration.yml`). Integration tests
+mock the SLM client at the `tests/integration/conftest.py` boundary
+so they don't require Ollama in CI.
 
 ## License
 

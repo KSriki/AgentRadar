@@ -18,9 +18,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastmcp import Client
-
 from agentradar_core import get_logger
+from fastmcp import Client
 
 from agentradar_supervisor.graph import get_roma_graph
 from agentradar_supervisor.state import ForecastState, ForecastTask
@@ -77,16 +76,19 @@ class Forecaster:
             log.warning("forecaster.run.no_forecast_produced", concept=concept)
             return {"forecasts_produced": 0}
 
-        result = await mcp.call_tool("propose_forecast", {
-            "concept_name": forecast["concept_name"],
-            "claim": forecast["prediction"],
-            "confidence": forecast["confidence"],
-            "confidence_band": band,
-            "horizon_months": forecast.get("horizon_months", 6),   # default 6 months
-            "reasoning": forecast.get("reasoning", ""),
-            "cited_source_ids": forecast.get("cited_concept_ids", []),
-            "evidence_snapshot": forecast.get("evidence_snapshot", {}),
-        })
+        result = await mcp.call_tool(
+            "propose_forecast",
+            {
+                "concept_name": forecast["concept_name"],
+                "claim": forecast["prediction"],
+                "confidence": forecast["confidence"],
+                "confidence_band": band,
+                "horizon_months": forecast.get("horizon_months", 6),  # default 6 months
+                "reasoning": forecast.get("reasoning", ""),
+                "cited_source_ids": forecast.get("cited_concept_ids", []),
+                "evidence_snapshot": forecast.get("evidence_snapshot", {}),
+            },
+        )
         log.info("forecaster.run.persisted", **result.data)
 
         return {
@@ -103,12 +105,15 @@ class Forecaster:
         Heuristic: highest mention velocity in the last 90 days among
         concepts that haven't been forecasted in the last 14 days.
         """
-        result = await mcp.call_tool("select_forecast_candidate", {
-            "velocity_window_days": 90,
-            "cooldown_days": 14,
-        })
+        result = await mcp.call_tool(
+            "select_forecast_candidate",
+            {
+                "velocity_window_days": 90,
+                "cooldown_days": 14,
+            },
+        )
         return result.data.get("concept_name")
-    
+
     async def run_topn(self, mcp: Client, top_n: int = 5) -> dict[str, Any]:
         """
         Execute a forecast.top_n composite workflow.
@@ -142,12 +147,12 @@ class Forecaster:
             "concepts": [f["concept_name"] for f in topn_forecasts],
         }
 
-    async def run_digest(self, mcp: Client, top_n: int = 5,
-                          label: str | None = None) -> dict[str, Any]:
+    async def run_digest(
+        self, mcp: Client, top_n: int = 5, label: str | None = None
+    ) -> dict[str, Any]:
         """Execute the forecast.digest composite workflow."""
         actual_label = label or f"Weekly digest, week of {time.strftime('%Y-%m-%d')}"
-        log.info("forecaster.run_digest.start",
-                 label=actual_label, top_n=top_n)
+        log.info("forecaster.run_digest.start", label=actual_label, top_n=top_n)
 
         task: ForecastTask = {
             "kind": "forecast.digest",
@@ -171,14 +176,17 @@ class Forecaster:
             return {"digests_produced": 0}
 
         # Persist the digest itself (forecasts inside are already persisted)
-        result = await mcp.call_tool("propose_digest", {
-            "label": digest["label"],
-            "themes": digest["themes"],
-            "standout": digest["standout"],
-            "forecasts": digest["forecasts"],
-            "average_confidence": digest["average_confidence"],
-            "confidence_band": final_state.get("confidence_band", "weak"),
-        })
+        result = await mcp.call_tool(
+            "propose_digest",
+            {
+                "label": digest["label"],
+                "themes": digest["themes"],
+                "standout": digest["standout"],
+                "forecasts": digest["forecasts"],
+                "average_confidence": digest["average_confidence"],
+                "confidence_band": final_state.get("confidence_band", "weak"),
+            },
+        )
         log.info("forecaster.run_digest.persisted", **result.data)
         return {
             "digests_produced": 1,

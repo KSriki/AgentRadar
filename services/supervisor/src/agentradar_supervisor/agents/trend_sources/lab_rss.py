@@ -14,8 +14,8 @@ from pathlib import Path
 import feedparser
 import httpx
 import yaml
-
 from agentradar_core import get_logger
+
 from agentradar_supervisor.agents.trend_sources.base import TrendItem
 
 log = get_logger(__name__)
@@ -89,9 +89,7 @@ class LabRssTrendSource:
 
             title = (getattr(entry, "title", "") or "").strip()
             summary = (
-                getattr(entry, "summary", "")
-                or getattr(entry, "description", "")
-                or ""
+                getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
             ).strip()
             link = getattr(entry, "link", "").strip()
             if not link or not title:

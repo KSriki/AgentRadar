@@ -11,11 +11,11 @@ on Scout-produced data being in the DB at test time.
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 
 import pytest
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
 
 MCP_URL = "http://localhost:8000/mcp/"
 
@@ -41,14 +41,18 @@ async def seed_mentions():
     same source_id would fail with unique-constraint violations.
     """
     import asyncpg
+
     conn = await asyncpg.connect(
-        host="localhost", port=5432,
-        user="agentradar", password="agentradar_dev", database="agentradar",
+        host="localhost",
+        port=5432,
+        user="agentradar",
+        password="agentradar_dev",
+        database="agentradar",
     )
     prefix = f"test_session2_{uuid.uuid4().hex[:8]}"
     concepts = [f"{prefix}_HIGH", f"{prefix}_MID", f"{prefix}_LOW"]
     try:
-        for concept, count in zip(concepts, [10, 5, 2]):
+        for concept, count in zip(concepts, [10, 5, 2], strict=False):
             for _ in range(count):
                 await conn.execute(
                     """
@@ -56,16 +60,19 @@ async def seed_mentions():
                         (concept_name, source_id, source_type, observed_at)
                     VALUES ($1, $2, 'arxiv', NOW())
                     """,
-                    concept, str(uuid.uuid4()),
+                    concept,
+                    str(uuid.uuid4()),
                 )
         yield concepts
     finally:
         for c in concepts:
             await conn.execute(
-                "DELETE FROM mention_events WHERE concept_name = $1", c,
+                "DELETE FROM mention_events WHERE concept_name = $1",
+                c,
             )
             await conn.execute(
-                "DELETE FROM forecasts WHERE concept_name = $1", c,
+                "DELETE FROM forecasts WHERE concept_name = $1",
+                c,
             )
         await conn.close()
         await conn.close()
@@ -77,13 +84,18 @@ async def seed_mentions():
 class TestSelectTopnConcepts:
     @pytest.mark.asyncio
     async def test_select_top_n_returns_concepts_ordered_by_volume(
-        self, mcp_client, seed_mentions,
+        self,
+        mcp_client,
+        seed_mentions,
     ):
-        result = await mcp_client.call_tool("select_top_n_concepts", {
-            "top_n": 20,
-            "velocity_window_days": 90,
-            "cooldown_days": 14,
-        })
+        result = await mcp_client.call_tool(
+            "select_top_n_concepts",
+            {
+                "top_n": 20,
+                "velocity_window_days": 90,
+                "cooldown_days": 14,
+            },
+        )
         names = result.data["concept_names"]
         # Our seeded concepts should appear, ordered HIGH > MID > LOW
         seeded = [n for n in names if n in seed_mentions]
@@ -94,30 +106,41 @@ class TestSelectTopnConcepts:
 
     @pytest.mark.asyncio
     async def test_select_top_n_respects_top_n_limit(self, mcp_client):
-        result = await mcp_client.call_tool("select_top_n_concepts", {
-            "top_n": 2,
-        })
+        result = await mcp_client.call_tool(
+            "select_top_n_concepts",
+            {
+                "top_n": 2,
+            },
+        )
         names = result.data["concept_names"]
         assert len(names) <= 2
 
     @pytest.mark.asyncio
     async def test_select_top_n_rejects_invalid_top_n(self, mcp_client):
-        with pytest.raises(Exception):  # fastmcp wraps as ToolError
-            await mcp_client.call_tool("select_top_n_concepts", {
-                "top_n": 50,  # over the 20 limit
-            })
+        with pytest.raises(ToolError):  # fastmcp wraps as ToolError
+            await mcp_client.call_tool(
+                "select_top_n_concepts",
+                {
+                    "top_n": 50,  # over the 20 limit
+                },
+            )
 
 
 class TestGetForecastEvidence:
     @pytest.mark.asyncio
     async def test_get_evidence_returns_full_shape(
-        self, mcp_client, seed_mentions,
+        self,
+        mcp_client,
+        seed_mentions,
     ):
         concept = seed_mentions[0]  # _HIGH, has 10 mentions
-        result = await mcp_client.call_tool("get_forecast_evidence", {
-            "concept_name": concept,
-            "velocity_window_days": 90,
-        })
+        result = await mcp_client.call_tool(
+            "get_forecast_evidence",
+            {
+                "concept_name": concept,
+                "velocity_window_days": 90,
+            },
+        )
         evidence = result.data
         assert evidence["concept_name"] == concept
         assert evidence["total_mentions"] == 10
@@ -127,10 +150,13 @@ class TestGetForecastEvidence:
 
     @pytest.mark.asyncio
     async def test_get_evidence_empty_concept_name_rejected(self, mcp_client):
-        with pytest.raises(Exception):
-            await mcp_client.call_tool("get_forecast_evidence", {
-                "concept_name": "",
-            })
+        with pytest.raises(ToolError):
+            await mcp_client.call_tool(
+                "get_forecast_evidence",
+                {
+                    "concept_name": "",
+                },
+            )
 
 
 class TestDigestPersistence:
@@ -138,16 +164,19 @@ class TestDigestPersistence:
     async def test_propose_digest_persists_and_list_returns_it(self, mcp_client):
         label = f"integration_test_{uuid.uuid4().hex[:8]}"
         # Persist
-        result = await mcp_client.call_tool("propose_digest", {
-            "label": label,
-            "themes": "Test themes paragraph",
-            "standout": "Test standout pick",
-            "forecasts": [
-                {"concept_name": "TestConcept", "prediction": "test", "confidence": 0.6},
-            ],
-            "average_confidence": 0.6,
-            "confidence_band": "medium",
-        })
+        result = await mcp_client.call_tool(
+            "propose_digest",
+            {
+                "label": label,
+                "themes": "Test themes paragraph",
+                "standout": "Test standout pick",
+                "forecasts": [
+                    {"concept_name": "TestConcept", "prediction": "test", "confidence": 0.6},
+                ],
+                "average_confidence": 0.6,
+                "confidence_band": "medium",
+            },
+        )
         assert result.data["status"] == "stored"
         digest_id = result.data["digest_id"]
 
@@ -158,9 +187,13 @@ class TestDigestPersistence:
 
         # Cleanup
         import asyncpg
+
         conn = await asyncpg.connect(
-            host="localhost", port=5432,
-            user="agentradar", password="agentradar_dev", database="agentradar",
+            host="localhost",
+            port=5432,
+            user="agentradar",
+            password="agentradar_dev",
+            database="agentradar",
         )
         try:
             await conn.execute("DELETE FROM digests WHERE id = $1::uuid", digest_id)
@@ -169,24 +202,30 @@ class TestDigestPersistence:
 
     @pytest.mark.asyncio
     async def test_propose_digest_rejects_invalid_band(self, mcp_client):
-        with pytest.raises(Exception):
-            await mcp_client.call_tool("propose_digest", {
-                "label": "x",
-                "themes": "t",
-                "standout": "s",
-                "forecasts": [],
-                "average_confidence": 0.5,
-                "confidence_band": "GARBAGE",  # not weak/medium/high
-            })
+        with pytest.raises(ToolError):
+            await mcp_client.call_tool(
+                "propose_digest",
+                {
+                    "label": "x",
+                    "themes": "t",
+                    "standout": "s",
+                    "forecasts": [],
+                    "average_confidence": 0.5,
+                    "confidence_band": "GARBAGE",  # not weak/medium/high
+                },
+            )
 
     @pytest.mark.asyncio
     async def test_propose_digest_rejects_oob_confidence(self, mcp_client):
-        with pytest.raises(Exception):
-            await mcp_client.call_tool("propose_digest", {
-                "label": "x",
-                "themes": "t",
-                "standout": "s",
-                "forecasts": [],
-                "average_confidence": 1.5,  # > 1.0
-                "confidence_band": "high",
-            })
+        with pytest.raises(ToolError):
+            await mcp_client.call_tool(
+                "propose_digest",
+                {
+                    "label": "x",
+                    "themes": "t",
+                    "standout": "s",
+                    "forecasts": [],
+                    "average_confidence": 1.5,  # > 1.0
+                    "confidence_band": "high",
+                },
+            )

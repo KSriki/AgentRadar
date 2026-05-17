@@ -173,7 +173,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      dashboard:                         
+      dashboard:
         condition: service_healthy
     ports:
       - "80:80"

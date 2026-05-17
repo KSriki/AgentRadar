@@ -17,11 +17,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
-
-from tavily import TavilyClient
 
 from agentradar_core import TavilySettings, get_logger, settings
+from tavily import TavilyClient
 
 log = get_logger(__name__)
 
@@ -32,8 +30,8 @@ class TavilyResult:
 
     url: str
     title: str
-    content: str        # AI-cleaned snippet, NOT the raw HTML
-    score: float        # Tavily's relevance score, 0-1
+    content: str  # AI-cleaned snippet, NOT the raw HTML
+    score: float  # Tavily's relevance score, 0-1
     published_date: str | None = None
 
 
@@ -44,9 +42,7 @@ class TavilyResearchClient:
         self._cfg = cfg
         api_key = cfg.api_key.get_secret_value()
         if not api_key:
-            raise ValueError(
-                "TAVILY_API_KEY is not set. Add it to .env or skip the Tavily Scout."
-            )
+            raise ValueError("TAVILY_API_KEY is not set. Add it to .env or skip the Tavily Scout.")
         self._client = TavilyClient(api_key=api_key)
 
     async def search(
@@ -75,8 +71,8 @@ class TavilyResearchClient:
                 query=query,
                 search_depth=depth,
                 max_results=n,
-                include_answer=False,        # we don't need the LLM-summary
-                include_raw_content=False,   # snippets are enough
+                include_answer=False,  # we don't need the LLM-summary
+                include_raw_content=False,  # snippets are enough
             )
         except Exception as exc:
             log.warning("tavily.search_failed", query=query, error=str(exc))

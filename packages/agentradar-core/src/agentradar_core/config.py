@@ -30,9 +30,7 @@ class Neo4jSettings(BaseSettings):
 class PostgresSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="POSTGRES_", extra="ignore")
 
-    dsn: SecretStr = SecretStr(
-        "postgresql://agentradar:agentradar_dev@localhost:5432/agentradar"
-    )
+    dsn: SecretStr = SecretStr("postgresql://agentradar:agentradar_dev@localhost:5432/agentradar")
 
 
 class S3Settings(BaseSettings):
@@ -68,6 +66,7 @@ class EmbeddingSettings(BaseSettings):
     model_id: str = "amazon.titan-embed-text-v2:0"
     dim: int = 1024
 
+
 class SLMSettings(BaseSettings):
     """Settings for the SLM (small language model) used by Scout, Extractor, etc."""
 
@@ -94,6 +93,7 @@ class TavilySettings(BaseSettings):
     search_depth: Literal["basic", "advanced"] = "advanced"
     max_results: int = 8
 
+
 class ScoutSettings(BaseSettings):
     """Settings for Scout-related config files and behavior."""
 
@@ -110,6 +110,7 @@ class Settings(BaseSettings):
     pass settings.neo4j to a Neo4j client constructor without
     plumbing every individual field.
     """
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -128,7 +129,7 @@ class Settings(BaseSettings):
     bedrock: BedrockSettings = Field(default_factory=BedrockSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     slm: SLMSettings = Field(default_factory=SLMSettings)
-    tavily: TavilySettings = Field(default_factory=TavilySettings)   # <-- add this
+    tavily: TavilySettings = Field(default_factory=TavilySettings)  # <-- add this
     scout: ScoutSettings = Field(default_factory=ScoutSettings)
 
 

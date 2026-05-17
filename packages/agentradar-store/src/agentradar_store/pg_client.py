@@ -14,7 +14,6 @@ from typing import Any
 from uuid import UUID
 
 import asyncpg
-
 from agentradar_core import (
     PendingTriple,
     PostgresSettings,
@@ -61,9 +60,7 @@ class PgClient:
     @staticmethod
     def hash_triple(subject: str, predicate: str, object_: str, source_id: str) -> str:
         """Deterministic hash for idempotency on triple proposals."""
-        return hashlib.sha256(
-            f"{subject}|{predicate}|{object_}|{source_id}".encode()
-        ).hexdigest()
+        return hashlib.sha256(f"{subject}|{predicate}|{object_}|{source_id}".encode()).hexdigest()
 
     async def propose_triple(self, triple: Triple) -> dict[str, Any]:
         """
@@ -171,9 +168,7 @@ class PgClient:
                 observed_at,
             )
 
-    async def mention_velocity(
-        self, concept_name: str, window_days: int = 90
-    ) -> dict[str, Any]:
+    async def mention_velocity(self, concept_name: str, window_days: int = 90) -> dict[str, Any]:
         """Weekly mention buckets + a simple slope (mentions/week trend)."""
         cutoff = datetime.now(UTC) - timedelta(days=window_days)
         pool = await self._ensure()
@@ -190,9 +185,7 @@ class PgClient:
                 concept_name,
                 cutoff,
             )
-        buckets = [
-            {"week": r["week"].isoformat(), "mentions": r["mentions"]} for r in rows
-        ]
+        buckets = [{"week": r["week"].isoformat(), "mentions": r["mentions"]} for r in rows]
         velocity = _slope([r["mentions"] for r in rows])
         return {
             "concept": concept_name,
@@ -252,7 +245,7 @@ class PgClient:
         except Exception as exc:
             log.warning("postgres.healthcheck_failed", error=str(exc))
             return False
-        
+
     # ---- Graph-aware query generation support ---------------------------
 
     async def find_singleton_concepts(
@@ -281,7 +274,8 @@ class PgClient:
                 ORDER BY observed_at DESC
                 LIMIT $2
                 """,
-                cutoff, limit,
+                cutoff,
+                limit,
             )
         return [
             {
@@ -326,7 +320,10 @@ class PgClient:
                 ) DESC
                 LIMIT $4
                 """,
-                midpoint, full_start, min_recent_mentions, limit,
+                midpoint,
+                full_start,
+                min_recent_mentions,
+                limit,
             )
         return [
             {
@@ -355,7 +352,7 @@ def _slope(values: list[int]) -> float:
     xs = list(range(n))
     x_mean = sum(xs) / n
     y_mean = sum(values) / n
-    num = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, values))
+    num = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, values, strict=False))
     den = sum((x - x_mean) ** 2 for x in xs)
     return num / den if den else 0.0
 

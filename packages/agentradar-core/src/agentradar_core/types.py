@@ -18,7 +18,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------------------
 # Enums — string-valued so they round-trip through JSON cleanly
 # ---------------------------------------------------------------------------
@@ -50,9 +49,9 @@ class TripleStatus(StrEnum):
 
 
 class ForecastConfidence(StrEnum):
-    HIGH = "high"      # >= 0.70
+    HIGH = "high"  # >= 0.70
     MEDIUM = "medium"  # 0.40 - 0.69
-    WEAK = "weak"      # < 0.40
+    WEAK = "weak"  # < 0.40
 
     @classmethod
     def from_score(cls, score: float) -> ForecastConfidence:
@@ -161,10 +160,7 @@ class ROMAState(TypedDict, total=False):
     trace_id: str
 
 
-
 ## CRITIC
-
-
 
 
 class CriticVerdict(BaseModel):
@@ -173,7 +169,7 @@ class CriticVerdict(BaseModel):
     verdict: Literal["approved", "rejected"]
     reasoning: str = Field(
         description="One-sentence explanation of why the source does or "
-                    "doesn't support the claim."
+        "doesn't support the claim."
     )
     confidence: float = Field(
         ge=0.0,

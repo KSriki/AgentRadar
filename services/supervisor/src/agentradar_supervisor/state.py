@@ -18,7 +18,6 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
-
 # ---- Task descriptors ----------------------------------------------------
 
 
@@ -45,8 +44,8 @@ class ForecastState(TypedDict, total=False):
     task: ForecastTask
     depth: int
     trace_id: str
-    parent_context: dict[str, Any]   # distilled context from parent invocation
-    mcp: Any                          # fastmcp Client passed through state
+    parent_context: dict[str, Any]  # distilled context from parent invocation
+    mcp: Any  # fastmcp Client passed through state
 
     # ---- Atomizer ----
     is_atomic: bool
@@ -62,9 +61,9 @@ class ForecastState(TypedDict, total=False):
     candidate_forecast: dict[str, Any]
 
     # ---- Aggregator ----
-    final_forecast: dict[str, Any]            # for forecast.concept
-    final_topn: list[dict[str, Any]]          # for forecast.top_n
-    final_digest: dict[str, Any]              # for forecast.digest
+    final_forecast: dict[str, Any]  # for forecast.concept
+    final_topn: list[dict[str, Any]]  # for forecast.top_n
+    final_digest: dict[str, Any]  # for forecast.digest
     confidence_band: Literal["weak", "medium", "high"]
 
 
@@ -91,6 +90,4 @@ class DigestSynthesis(BaseModel):
             "concepts by name."
         )
     )
-    standout: str = Field(
-        description="The single most notable forecast and why it matters."
-    )
+    standout: str = Field(description="The single most notable forecast and why it matters.")

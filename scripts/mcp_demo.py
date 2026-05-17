@@ -48,14 +48,14 @@ async def demo() -> None:
         print("\n=== Pending triples (Critic's view) ===")
         result = await client.call_tool("list_pending_triples", {"limit": 10})
         for t in result.data:
-            print(f"  {t['subject']} --[{t['predicate']}]--> {t['object']} "
-                  f"(conf={t['confidence']}, by={t['proposer_agent']})")
+            print(
+                f"  {t['subject']} --[{t['predicate']}]--> {t['object']} "
+                f"(conf={t['confidence']}, by={t['proposer_agent']})"
+            )
 
         # --- 5. Critic approves ----------------------------------------
         print("\n=== Approving the proposal ===")
-        result = await client.call_tool(
-            "approve_triple", {"triple_id": proposal["triple_id"]}
-        )
+        result = await client.call_tool("approve_triple", {"triple_id": proposal["triple_id"]})
         print(json.dumps(result.data, indent=2))
 
         # --- 6. Verify it's in the graph --------------------------------

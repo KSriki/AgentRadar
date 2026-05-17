@@ -15,12 +15,10 @@ import inspect
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from agentradar_supervisor import nodes
 from agentradar_supervisor.agents import critic, forecaster, scout
 from agentradar_supervisor.nodes import (
     MAX_DEPTH,
-    _aggregate_concept,
     _aggregate_topn,
     _distill_parent_context,
     aggregate,
@@ -50,10 +48,12 @@ class TestAtomizeComposite:
         assert result["is_atomic"] is True
 
     def test_depth_above_cap_forces_atomic(self):
-        result = atomize({
-            "task": {"kind": "forecast.digest"},
-            "depth": MAX_DEPTH + 5,
-        })
+        result = atomize(
+            {
+                "task": {"kind": "forecast.digest"},
+                "depth": MAX_DEPTH + 5,
+            }
+        )
         assert result["is_atomic"] is True
 
 
@@ -67,9 +67,13 @@ class TestPlanner:
     @pytest.mark.asyncio
     async def test_plan_topn_emits_n_concept_subtasks(self):
         mcp = MagicMock()
-        mcp.call_tool = AsyncMock(return_value=MagicMock(data={
-            "concept_names": ["MCP", "A2A", "ROMA"],
-        }))
+        mcp.call_tool = AsyncMock(
+            return_value=MagicMock(
+                data={
+                    "concept_names": ["MCP", "A2A", "ROMA"],
+                }
+            )
+        )
         state = {
             "task": {"kind": "forecast.top_n", "top_n": 3},
             "mcp": mcp,
@@ -86,21 +90,29 @@ class TestPlanner:
     async def test_plan_topn_empty_when_no_candidates(self):
         """select_top_n_concepts returns empty → planner returns empty subtasks."""
         mcp = MagicMock()
-        mcp.call_tool = AsyncMock(return_value=MagicMock(data={
-            "concept_names": [],
-        }))
-        result = await plan({
-            "task": {"kind": "forecast.top_n", "top_n": 5},
-            "mcp": mcp,
-        })
+        mcp.call_tool = AsyncMock(
+            return_value=MagicMock(
+                data={
+                    "concept_names": [],
+                }
+            )
+        )
+        result = await plan(
+            {
+                "task": {"kind": "forecast.top_n", "top_n": 5},
+                "mcp": mcp,
+            }
+        )
         assert result["subtasks"] == []
 
     @pytest.mark.asyncio
     async def test_plan_digest_emits_one_topn_subtask(self):
-        result = await plan({
-            "task": {"kind": "forecast.digest", "top_n": 5},
-            "mcp": MagicMock(),  # not called for digest planning
-        })
+        result = await plan(
+            {
+                "task": {"kind": "forecast.digest", "top_n": 5},
+                "mcp": MagicMock(),  # not called for digest planning
+            }
+        )
         subtasks = result["subtasks"]
         assert len(subtasks) == 1
         assert subtasks[0]["kind"] == "forecast.top_n"
@@ -108,10 +120,12 @@ class TestPlanner:
 
     @pytest.mark.asyncio
     async def test_plan_unknown_kind_returns_empty(self):
-        result = await plan({
-            "task": {"kind": "forecast.unknown"},
-            "mcp": MagicMock(),
-        })
+        result = await plan(
+            {
+                "task": {"kind": "forecast.unknown"},
+                "mcp": MagicMock(),
+            }
+        )
         assert result["subtasks"] == []
 
     @pytest.mark.asyncio
@@ -156,9 +170,11 @@ class TestParentContextDistillation:
 
     def test_concept_parent_returns_empty(self):
         """A concept is atomic; no children to distill to."""
-        ctx = _distill_parent_context({
-            "task": {"kind": "forecast.concept", "concept_name": "MCP"},
-        })
+        ctx = _distill_parent_context(
+            {
+                "task": {"kind": "forecast.concept", "concept_name": "MCP"},
+            }
+        )
         assert ctx == {}
 
 
@@ -177,9 +193,14 @@ class TestRoutingFunctionsSession2:
         assert route_after_atomize({"is_atomic": True}) == "execute"
 
     def test_subtasks_list_routes_to_execute(self):
-        assert route_after_plan({
-            "subtasks": [{"kind": "forecast.concept", "concept_name": "X"}],
-        }) == "execute"
+        assert (
+            route_after_plan(
+                {
+                    "subtasks": [{"kind": "forecast.concept", "concept_name": "X"}],
+                }
+            )
+            == "execute"
+        )
 
     def test_empty_subtasks_routes_to_aggregate(self):
         assert route_after_plan({"subtasks": []}) == "aggregate"
@@ -222,10 +243,12 @@ class TestAggregateTopn:
         assert [f["concept_name"] for f in result["final_topn"]] == ["MCP", "A2A"]
 
     def test_topn_empty_results_returns_empty_list(self):
-        result = _aggregate_topn({
-            "task": {"kind": "forecast.top_n", "top_n": 5},
-            "subtask_results": [],
-        })
+        result = _aggregate_topn(
+            {
+                "task": {"kind": "forecast.top_n", "top_n": 5},
+                "subtask_results": [],
+            }
+        )
         assert result["final_topn"] == []
 
 
@@ -280,9 +303,9 @@ class TestArchitecturalRules:
     def test_nodes_module_does_not_import_get_pg_client(self):
         """Same rule for the ROMA node functions."""
         source = inspect.getsource(nodes)
-        assert "get_pg_client" not in source, (
-            "ROMA nodes must not import get_pg_client. Use MCP tools."
-        )
+        assert (
+            "get_pg_client" not in source
+        ), "ROMA nodes must not import get_pg_client. Use MCP tools."
 
     def test_critic_agent_does_not_import_get_pg_client(self):
         source = inspect.getsource(critic)
@@ -297,6 +320,5 @@ class TestArchitecturalRules:
         event-loop affinity. This test pins the distinction."""
         source = inspect.getsource(nodes)
         assert "get_slm_client" in source, (
-            "Confirm SLM client usage is still permitted (httpx-based, "
-            "no event-loop affinity)."
+            "Confirm SLM client usage is still permitted (httpx-based, " "no event-loop affinity)."
         )

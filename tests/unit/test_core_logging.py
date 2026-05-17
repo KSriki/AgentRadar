@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import json
-import logging
-from io import StringIO
 
 import pytest
-
 from agentradar_core import bind_trace_id, clear_trace_context, configure_logging, get_logger
 
 
@@ -37,9 +34,7 @@ class TestLoggingConfiguration:
         assert record["agent"] == "scout"
         assert record["event"] == "did_a_thing"
 
-    def test_clear_trace_context_removes_id(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_clear_trace_context_removes_id(self, capsys: pytest.CaptureFixture[str]) -> None:
         configure_logging(level="INFO", json_output=True)
         log = get_logger("test_clear")
 

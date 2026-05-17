@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 import aioboto3
-
 from agentradar_core import S3Settings, get_logger, settings
 
 log = get_logger(__name__)

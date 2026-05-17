@@ -1,0 +1,41 @@
+# Pre-commit hooks: run locally before each commit.
+#
+# Setup once after cloning:
+#   uv run pre-commit install
+#
+# Manual run on all files:
+#   uv run pre-commit run --all-files
+#
+# Bypass for emergency only:
+#   git commit --no-verify
+#
+# Scope: fast checks (lint, format, file hygiene). Slow checks like mypy
+# and full test runs are CI's job, not pre-commit's. Pre-commit must stay
+# under ~5 seconds or developers will start using --no-verify.
+
+repos:
+  # Standard file-hygiene checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        # Multi-document YAML is fine; the cyclic anchors used in
+        # docker-compose are also fine. Default behavior is correct.
+      - id: check-toml
+      - id: check-json
+        exclude: ^apps/dashboard/tsconfig\.json$  # tsconfig uses comments
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  # Ruff: lint + format. Single tool, much faster than running them separately.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format

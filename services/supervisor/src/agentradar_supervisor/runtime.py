@@ -22,12 +22,11 @@ import asyncio
 import os
 import signal
 import time
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, AsyncIterator, Callable
-
-from fastmcp import Client
+from typing import Any
 
 from agentradar_core import (
     bind_trace_id,
@@ -35,18 +34,23 @@ from agentradar_core import (
     configure_logging,
     get_logger,
 )
+from fastmcp import Client
 
 from agentradar_supervisor.agents import (
-    Agent, ArxivScout, Critic, Forecaster, TavilyScout, TrendScout,
+    Agent,
+    ArxivScout,
+    Critic,
+    Forecaster,
+    TavilyScout,
+    TrendScout,
 )
 from agentradar_supervisor.agents.trend_sources import (
-    GithubTrendSource, HnTrendSource, LabRssTrendSource,
+    GithubTrendSource,
+    HnTrendSource,
+    LabRssTrendSource,
 )
-from agentradar_supervisor.schedule import ScheduleSettings, load_schedule
 from agentradar_supervisor.config_loader import load_tavily_queries
-
-
-
+from agentradar_supervisor.schedule import ScheduleSettings, load_schedule
 
 configure_logging()
 log = get_logger("supervisor")
@@ -89,6 +93,7 @@ class _DigestRunnerAgent:
         forecaster = Forecaster()
         return await forecaster.run_digest(mcp, top_n=self._top_n)
 
+
 class Supervisor:
     """The scheduler loop."""
 
@@ -117,32 +122,21 @@ class Supervisor:
 
         log.info(
             "supervisor.loop_started",
-            jobs=[
-                {"name": j.name, "interval_s": j.interval_seconds}
-                for j in self._jobs
-            ],
+            jobs=[{"name": j.name, "interval_s": j.interval_seconds} for j in self._jobs],
             fire_on_startup=self._fire_on_startup,
             mcp_url=MCP_URL,
         )
 
-       
         log.info(
             "supervisor.loop_started",
-            jobs=[
-                {"name": j.name, "interval_s": j.interval_seconds}
-                for j in self._jobs
-            ],
+            jobs=[{"name": j.name, "interval_s": j.interval_seconds} for j in self._jobs],
             fire_on_startup=self._fire_on_startup,
             mcp_url=MCP_URL,
         )
         while not self._shutdown.is_set():
-            await self._tick()                        # ← no shared mcp
-            try:
-                await asyncio.wait_for(
-                    self._shutdown.wait(), timeout=TICK_SECONDS
-                )
-            except asyncio.TimeoutError:
-                pass
+            await self._tick()  # ← no shared mcp
+            with suppress(TimeoutError):
+                await asyncio.wait_for(self._shutdown.wait(), timeout=TICK_SECONDS)
 
         log.info("supervisor.loop_exited")
 
@@ -158,7 +152,8 @@ class Supervisor:
             except Exception as exc:
                 log.error(
                     "supervisor.tick_session_failure",
-                    job=job.name, error=str(exc),
+                    job=job.name,
+                    error=str(exc),
                 )
             job.last_run_at = time.monotonic()
 
@@ -225,12 +220,16 @@ class Supervisor:
                 if attempts >= max_attempts:
                     log.error(
                         "supervisor.mcp_session_failed",
-                        url=MCP_URL, attempts=attempts, error=str(exc),
+                        url=MCP_URL,
+                        attempts=attempts,
+                        error=str(exc),
                     )
                     raise
                 log.warning(
                     "supervisor.mcp_session_retry",
-                    url=MCP_URL, attempt=attempts, error=str(exc),
+                    url=MCP_URL,
+                    attempt=attempts,
+                    error=str(exc),
                 )
                 await asyncio.sleep(backoff)
                 backoff *= 2  # exponential
@@ -241,9 +240,7 @@ def build_supervisor() -> Supervisor:
     cfg: ScheduleSettings = load_schedule()
 
     # arXiv categories — round-robin
-    arxiv_categories = [
-        c.strip() for c in cfg.scout_arxiv_categories.split(",") if c.strip()
-    ]
+    arxiv_categories = [c.strip() for c in cfg.scout_arxiv_categories.split(",") if c.strip()]
     if not arxiv_categories:
         raise ValueError("SCHEDULE_SCOUT_ARXIV_CATEGORIES must be non-empty")
 
@@ -271,17 +268,17 @@ def build_supervisor() -> Supervisor:
             query=query,
             max_results=cfg.scout_tavily_max_results,
         )
-    
+
     def make_forecaster() -> Agent:
         # Pass concept_name=None so the Forecaster auto-selects the
         # highest-velocity-not-recently-forecasted concept each run.
         return Forecaster(concept_name=None)
-    
+
     def make_digest_forecaster() -> Agent:
         # Same Forecaster class, but the runner will dispatch on a
         # composite workflow rather than the atomic default.
         return _DigestRunnerAgent(top_n=cfg.digest_top_n)
-    
+
     trend_source_factories = [
         lambda: GithubTrendSource(),
         lambda: HnTrendSource(),

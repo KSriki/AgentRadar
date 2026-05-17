@@ -9,10 +9,9 @@ from typing import Any
 
 import feedparser
 import httpx
-from fastmcp import Client
-
 from agentradar_core import get_logger
 from agentradar_store import get_slm_client
+from fastmcp import Client
 
 log = get_logger(__name__)
 
@@ -93,7 +92,9 @@ class ArxivScout:
             papers_with_concepts += 1
             log.info(
                 "scout.paper.done",
-                arxiv_id=p.arxiv_id, concepts=concepts, **stats,
+                arxiv_id=p.arxiv_id,
+                concepts=concepts,
+                **stats,
             )
 
         summary = {
@@ -123,32 +124,40 @@ class ArxivScout:
             )
             authors_str = getattr(entry, "author", "")
             authors = [a.strip() for a in authors_str.split(",") if a.strip()]
-            out.append(ArxivPaper(
-                arxiv_id=arxiv_id,
-                title=entry.title.strip(),
-                summary=entry.summary.strip(),
-                published=published,
-                authors=authors,
-                link=entry.link,
-            ))
+            out.append(
+                ArxivPaper(
+                    arxiv_id=arxiv_id,
+                    title=entry.title.strip(),
+                    summary=entry.summary.strip(),
+                    published=published,
+                    authors=authors,
+                    link=entry.link,
+                )
+            )
         log.info("scout.fetch.done", count=len(out), category=self.category)
         return out
 
     async def _store_raw(self, mcp: Client, papers: list[ArxivPaper]) -> None:
         for p in papers:
-            payload = json.dumps({
-                "arxiv_id": p.arxiv_id,
-                "title": p.title,
-                "summary": p.summary,
-                "published": p.published.isoformat(),
-                "authors": p.authors,
-                "link": p.link,
-            }, indent=2)
-            await mcp.call_tool("put_text_artifact", {
-                "key": p.s3_key,
-                "content": payload,
-                "content_type": "application/json",
-            })
+            payload = json.dumps(
+                {
+                    "arxiv_id": p.arxiv_id,
+                    "title": p.title,
+                    "summary": p.summary,
+                    "published": p.published.isoformat(),
+                    "authors": p.authors,
+                    "link": p.link,
+                },
+                indent=2,
+            )
+            await mcp.call_tool(
+                "put_text_artifact",
+                {
+                    "key": p.s3_key,
+                    "content": payload,
+                    "content_type": "application/json",
+                },
+            )
         log.info("scout.store_raw.done", count=len(papers))
 
     async def _extract_concepts(self, paper: ArxivPaper) -> list[str]:
@@ -174,20 +183,26 @@ class ArxivScout:
         mentions = 0
         proposals = 0
         for concept in concepts:
-            await mcp.call_tool("record_mention", {
-                "concept_name": concept,
-                "source_id": paper.source_id,
-                "source_type": "arxiv",
-                "observed_at": paper.published.isoformat(),
-            })
+            await mcp.call_tool(
+                "record_mention",
+                {
+                    "concept_name": concept,
+                    "source_id": paper.source_id,
+                    "source_type": "arxiv",
+                    "observed_at": paper.published.isoformat(),
+                },
+            )
             mentions += 1
-            await mcp.call_tool("propose_triple", {
-                "proposer_agent": self.name,
-                "subject": concept,
-                "predicate": "MENTIONED_IN",
-                "object": paper.source_id,
-                "source_id": paper.source_id,
-                "confidence": 0.6,
-            })
+            await mcp.call_tool(
+                "propose_triple",
+                {
+                    "proposer_agent": self.name,
+                    "subject": concept,
+                    "predicate": "MENTIONED_IN",
+                    "object": paper.source_id,
+                    "source_id": paper.source_id,
+                    "confidence": 0.6,
+                },
+            )
             proposals += 1
         return {"mentions": mentions, "proposals": proposals}

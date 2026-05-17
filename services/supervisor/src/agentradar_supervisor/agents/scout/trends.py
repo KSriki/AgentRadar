@@ -14,10 +14,10 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from fastmcp import Client
-
 from agentradar_core import get_logger
 from agentradar_store import get_slm_client
+from fastmcp import Client
+
 from agentradar_supervisor.agents.trend_sources import (
     TrendItem,
     TrendSource,
@@ -71,10 +71,7 @@ class TrendScout:
 
         # Step 2: dedupe in-memory by URL
         seen: set[str] = set()
-        unique = [
-            i for i in items
-            if not (i.url in seen or seen.add(i.url))
-        ]
+        unique = [i for i in items if not (i.url in seen or seen.add(i.url))]
 
         # Step 3: store raw artifacts
         await self._store_raw(mcp, unique)
@@ -88,7 +85,8 @@ class TrendScout:
             if not concepts:
                 log.info(
                     "scout_trends.item.no_concepts",
-                    source_id=item.source_id, title=item.title[:80],
+                    source_id=item.source_id,
+                    title=item.title[:80],
                 )
                 continue
             stats = await self._propose_findings(mcp, item, concepts)
@@ -117,21 +115,28 @@ class TrendScout:
 
     async def _store_raw(self, mcp: Client, items: list[TrendItem]) -> None:
         for item in items:
-            payload = json.dumps({
-                "source_kind": item.source_kind,
-                "source_id": item.source_id,
-                "url": item.url,
-                "title": item.title,
-                "summary": item.summary,
-                "published_at": item.published_at.isoformat(),
-                "extra": item.extra,
-                "fetched_at": datetime.now(UTC).isoformat(),
-            }, indent=2, default=str)
-            await mcp.call_tool("put_text_artifact", {
-                "key": item.s3_key,
-                "content": payload,
-                "content_type": "application/json",
-            })
+            payload = json.dumps(
+                {
+                    "source_kind": item.source_kind,
+                    "source_id": item.source_id,
+                    "url": item.url,
+                    "title": item.title,
+                    "summary": item.summary,
+                    "published_at": item.published_at.isoformat(),
+                    "extra": item.extra,
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                },
+                indent=2,
+                default=str,
+            )
+            await mcp.call_tool(
+                "put_text_artifact",
+                {
+                    "key": item.s3_key,
+                    "content": payload,
+                    "content_type": "application/json",
+                },
+            )
         log.info("scout_trends.store_raw.done", count=len(items))
 
     # ----- step 4 ----------------------------------------------------------
@@ -148,12 +153,12 @@ class TrendScout:
             text = text.split("```", 2)[1].lstrip("json\n").rstrip("`").strip()
         try:
             parsed = json.loads(text)
-            return [c for c in parsed.get("concepts", [])
-                    if isinstance(c, str) and c.strip()]
+            return [c for c in parsed.get("concepts", []) if isinstance(c, str) and c.strip()]
         except json.JSONDecodeError:
             log.warning(
                 "scout_trends.extract.bad_json",
-                source_id=item.source_id, raw=text[:200],
+                source_id=item.source_id,
+                raw=text[:200],
             )
             return []
 
@@ -166,25 +171,31 @@ class TrendScout:
         mentions = 0
         proposals = 0
         for concept in concepts:
-            await mcp.call_tool("record_mention", {
-                "concept_name": concept,
-                "source_id": item.source_id,
-                # Map source_kind to a SourceType the schema accepts.
-                # 'blog' is closest for all three currently.
-                "source_type": "blog",
-                "observed_at": observed_at,
-            })
+            await mcp.call_tool(
+                "record_mention",
+                {
+                    "concept_name": concept,
+                    "source_id": item.source_id,
+                    # Map source_kind to a SourceType the schema accepts.
+                    # 'blog' is closest for all three currently.
+                    "source_type": "blog",
+                    "observed_at": observed_at,
+                },
+            )
             mentions += 1
-            await mcp.call_tool("propose_triple", {
-                "proposer_agent": f"{self.name}-{item.source_kind}",
-                "subject": concept,
-                "predicate": "MENTIONED_IN",
-                "object": item.source_id,
-                "source_id": item.source_id,
-                # Slightly higher than arXiv MENTIONED_IN — trend signals
-                # are a stronger "this matters now" signal than just
-                # appearing in some abstract somewhere
-                "confidence": 0.65,
-            })
+            await mcp.call_tool(
+                "propose_triple",
+                {
+                    "proposer_agent": f"{self.name}-{item.source_kind}",
+                    "subject": concept,
+                    "predicate": "MENTIONED_IN",
+                    "object": item.source_id,
+                    "source_id": item.source_id,
+                    # Slightly higher than arXiv MENTIONED_IN — trend signals
+                    # are a stronger "this matters now" signal than just
+                    # appearing in some abstract somewhere
+                    "confidence": 0.65,
+                },
+            )
             proposals += 1
         return {"mentions": mentions, "proposals": proposals}

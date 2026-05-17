@@ -14,12 +14,10 @@ orchestration — pick concept → invoke graph → persist result.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from agentradar_supervisor.agents.forecaster import Forecaster
-
 
 # ---- Helpers -------------------------------------------------------------
 
@@ -54,12 +52,11 @@ def _patch_roma(monkeypatch, return_state):
 def _queue_candidate_response(mcp, concept_name: str | None) -> None:
     """Queue the MCP response that the Forecaster's auto-select call expects."""
     # The mock has its own queueing — push a select_forecast_candidate response
-    mcp.responses.setdefault("select_forecast_candidate", []).append(
-        {"concept_name": concept_name}
-    )
+    mcp.responses.setdefault("select_forecast_candidate", []).append({"concept_name": concept_name})
 
 
 # ---- Candidate selection ------------------------------------------------
+
 
 class TestCandidateSelection:
     @pytest.mark.asyncio
@@ -74,9 +71,7 @@ class TestCandidateSelection:
         assert summary["concept"] == "ForcedConcept"
 
         # Verify select_forecast_candidate was NOT called
-        select_calls = [
-            c for c in mock_mcp.calls if c["tool"] == "select_forecast_candidate"
-        ]
+        select_calls = [c for c in mock_mcp.calls if c["tool"] == "select_forecast_candidate"]
         assert len(select_calls) == 0
 
     @pytest.mark.asyncio
@@ -90,9 +85,7 @@ class TestCandidateSelection:
         assert summary["forecasts_produced"] == 1
 
         # Verify select_forecast_candidate WAS called
-        select_calls = [
-            c for c in mock_mcp.calls if c["tool"] == "select_forecast_candidate"
-        ]
+        select_calls = [c for c in mock_mcp.calls if c["tool"] == "select_forecast_candidate"]
         assert len(select_calls) == 1
 
     @pytest.mark.asyncio
@@ -104,10 +97,9 @@ class TestCandidateSelection:
         summary = await agent.run(mock_mcp)
         assert summary["forecasts_produced"] == 0
         # propose_forecast should not have been called
-        propose_calls = [
-            c for c in mock_mcp.calls if c["tool"] == "propose_forecast"
-        ]
+        propose_calls = [c for c in mock_mcp.calls if c["tool"] == "propose_forecast"]
         assert len(propose_calls) == 0
+
 
 # ---- Persistence call shape ---------------------------------------------
 
@@ -115,7 +107,9 @@ class TestCandidateSelection:
 class TestPersistenceCall:
     @pytest.mark.asyncio
     async def test_propose_forecast_called_with_correct_fields(
-        self, mock_mcp, monkeypatch,
+        self,
+        mock_mcp,
+        monkeypatch,
     ):
         _patch_roma(monkeypatch, _final_state_with_forecast("MCP"))
 

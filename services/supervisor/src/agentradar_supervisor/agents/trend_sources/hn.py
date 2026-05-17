@@ -13,8 +13,8 @@ from pathlib import Path
 
 import httpx
 import yaml
-
 from agentradar_core import get_logger
+
 from agentradar_supervisor.agents.trend_sources.base import TrendItem
 
 log = get_logger(__name__)
@@ -43,9 +43,7 @@ class HnTrendSource:
         # Algolia accepts OR'd terms via parentheses — we wrap each
         # keyword in quotes for phrase matching.
         query = " OR ".join(f'"{kw}"' for kw in self.keywords)
-        cutoff = int(
-            (datetime.now(UTC) - timedelta(hours=self.window_hours)).timestamp()
-        )
+        cutoff = int((datetime.now(UTC) - timedelta(hours=self.window_hours)).timestamp())
 
         params = {
             "query": query,
@@ -72,13 +70,11 @@ class HnTrendSource:
                 continue
             # Stories don't always have a body; HN's value is the title + comments
             story_text = (hit.get("story_text") or "").strip()
-            summary = story_text or title    # fall back to title
+            summary = story_text or title  # fall back to title
 
             published_iso = hit.get("created_at", "")
             try:
-                published_at = datetime.fromisoformat(
-                    published_iso.replace("Z", "+00:00")
-                )
+                published_at = datetime.fromisoformat(published_iso.replace("Z", "+00:00"))
             except ValueError:
                 published_at = datetime.now(UTC)
 

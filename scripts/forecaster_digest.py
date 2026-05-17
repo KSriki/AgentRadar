@@ -11,11 +11,9 @@ import argparse
 import asyncio
 import sys
 
-from fastmcp import Client
-
 from agentradar_core import configure_logging
 from agentradar_supervisor.agents import Forecaster
-
+from fastmcp import Client
 
 MCP_URL = "http://localhost/mcp/"
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -14,9 +13,7 @@ class TestNeo4jHealthcheck:
 
 
 class TestCommitTriple:
-    async def test_commit_creates_concepts_and_relationship(
-        self, clean_neo4j
-    ) -> None:
+    async def test_commit_creates_concepts_and_relationship(self, clean_neo4j) -> None:
         await clean_neo4j.commit_triple_relationship(
             subject="MCP",
             predicate="INTRODUCED_BY",
@@ -34,7 +31,8 @@ class TestCommitTriple:
                 RETURN subj.name AS s, obj.name AS o,
                        r.confidence AS c, r.source_id AS src
                 """,
-                subj="MCP", obj="Anthropic",
+                subj="MCP",
+                obj="Anthropic",
             )
             row = await result.single()
 

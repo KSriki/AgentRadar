@@ -18,8 +18,8 @@ from pathlib import Path
 
 import httpx
 import yaml
-
 from agentradar_core import get_logger
+
 from agentradar_supervisor.agents.trend_sources.base import TrendItem
 
 log = get_logger(__name__)
@@ -44,9 +44,7 @@ class GithubTrendSource:
 
     def __init__(self, config_path: Path | None = None) -> None:
         if config_path is None:
-            config_path = (
-                Path.cwd() / "config" / "scouts" / "trend_github.yaml"
-            )
+            config_path = Path.cwd() / "config" / "scouts" / "trend_github.yaml"
         cfg = yaml.safe_load(config_path.read_text())
         self.topics: list[str] = list(cfg.get("topics", []))
         self.since: str = cfg.get("since", "weekly")
@@ -71,21 +69,23 @@ class GithubTrendSource:
         ) as http:
             for topic in self.topics:
                 try:
-                    items.extend(
-                        await self._fetch_topic(http, topic, cutoff)
-                    )
+                    items.extend(await self._fetch_topic(http, topic, cutoff))
                 except Exception as exc:
                     # Per-topic isolation — one bad query doesn't kill the run
                     log.warning(
                         "trend.github.topic_failed",
-                        topic=topic, error=str(exc),
+                        topic=topic,
+                        error=str(exc),
                     )
 
         log.info("trend.github.fetched", total=len(items))
         return items
 
     async def _fetch_topic(
-        self, http: httpx.AsyncClient, topic: str, cutoff: str,
+        self,
+        http: httpx.AsyncClient,
+        topic: str,
+        cutoff: str,
     ) -> list[TrendItem]:
         params = {
             "q": f"topic:{topic} pushed:>={cutoff}",
@@ -120,9 +120,7 @@ class GithubTrendSource:
 
             pushed_at_str = repo.get("pushed_at", "")
             try:
-                pushed_at = datetime.fromisoformat(
-                    pushed_at_str.replace("Z", "+00:00")
-                )
+                pushed_at = datetime.fromisoformat(pushed_at_str.replace("Z", "+00:00"))
             except (ValueError, AttributeError):
                 pushed_at = datetime.now(UTC)
 

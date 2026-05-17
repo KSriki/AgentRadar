@@ -7,10 +7,9 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from fastmcp import Client
-
 from agentradar_core import get_logger
 from agentradar_store import get_s3_client, get_slm_client
+from fastmcp import Client
 
 log = get_logger(__name__)
 
@@ -18,8 +17,15 @@ log = get_logger(__name__)
 _CYPHER_IDENT = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
 KNOWN_PREDICATES: set[str] = {
-    "INSTANCE_OF", "INTRODUCED_BY", "FIRST_SEEN_IN", "IMPLEMENTS",
-    "COMPETES_WITH", "SUPERSEDES", "MENTIONED_IN", "GOVERNED_BY", "DEPRECATES",
+    "INSTANCE_OF",
+    "INTRODUCED_BY",
+    "FIRST_SEEN_IN",
+    "IMPLEMENTS",
+    "COMPETES_WITH",
+    "SUPERSEDES",
+    "MENTIONED_IN",
+    "GOVERNED_BY",
+    "DEPRECATES",
 }
 
 
@@ -107,7 +113,8 @@ class Critic:
             except Exception as exc:
                 log.exception(
                     "critic.review_failed",
-                    triple_id=triple.triple_id, error=str(exc),
+                    triple_id=triple.triple_id,
+                    error=str(exc),
                 )
 
         summary = {
@@ -152,9 +159,7 @@ class Critic:
             return False, f"predicate {triple.predicate!r} not in ontology"
         return True, None
 
-    async def _faithfulness_check(
-        self, triple: TripleToReview
-    ) -> tuple[bool, str, float]:
+    async def _faithfulness_check(self, triple: TripleToReview) -> tuple[bool, str, float]:
         source_text = await self._fetch_source_text(triple.source_id)
         if source_text is None:
             return False, f"could not fetch source artifact for {triple.source_id}", 1.0
@@ -223,7 +228,7 @@ class Critic:
                     f"URL: {payload.get('url', '')}\n\n"
                     f"CONTENT: {payload.get('content', '')}"
                 )
-            
+
             if prefix == "trend-github":
                 body = await s3.get_artifact(f"trends/github/{identifier}.json")
                 payload = json.loads(body.decode("utf-8"))
@@ -254,31 +259,39 @@ class Critic:
                     f"CONTENT: {payload.get('summary', '')}"
                 )
 
-            log.warning("critic.unknown_source_type",
-                        source_id=source_id, prefix=prefix)
+            log.warning("critic.unknown_source_type", source_id=source_id, prefix=prefix)
             return None
 
         except Exception as exc:
             log.warning(
                 "critic.fetch_artifact_failed",
-                source_id=source_id, error=str(exc),
+                source_id=source_id,
+                error=str(exc),
             )
             return None
 
     async def _decide(
-        self, mcp: Client, triple: TripleToReview,
-        approved: bool, reasoning: str, stage: str,
+        self,
+        mcp: Client,
+        triple: TripleToReview,
+        approved: bool,
+        reasoning: str,
+        stage: str,
     ) -> dict[str, Any]:
         decision = "approved" if approved else "rejected"
         log.info(
             "critic.decided",
-            triple_id=triple.triple_id, decision=decision,
-            stage=stage, reasoning=reasoning,
+            triple_id=triple.triple_id,
+            decision=decision,
+            stage=stage,
+            reasoning=reasoning,
         )
         if self.dry_run:
             return {
                 "triple_id": triple.triple_id,
-                "decision": decision, "stage": stage, "reasoning": reasoning,
+                "decision": decision,
+                "stage": stage,
+                "reasoning": reasoning,
             }
         if approved:
             await mcp.call_tool("approve_triple", {"triple_id": triple.triple_id})
@@ -289,5 +302,7 @@ class Critic:
             )
         return {
             "triple_id": triple.triple_id,
-            "decision": decision, "stage": stage, "reasoning": reasoning,
+            "decision": decision,
+            "stage": stage,
+            "reasoning": reasoning,
         }

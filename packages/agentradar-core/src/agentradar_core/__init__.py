@@ -6,10 +6,10 @@ from agentradar_core.config import (
     Neo4jSettings,
     PostgresSettings,
     S3Settings,
+    ScoutSettings,
     Settings,
     SLMSettings,
     TavilySettings,
-    ScoutSettings,
     settings,
 )
 from agentradar_core.logging import (
@@ -20,6 +20,7 @@ from agentradar_core.logging import (
 )
 from agentradar_core.types import (
     ConceptType,
+    CriticVerdict,
     Forecast,
     ForecastConfidence,
     PendingTriple,
@@ -29,7 +30,6 @@ from agentradar_core.types import (
     TaskSpec,
     Triple,
     TripleStatus,
-    CriticVerdict
 )
 
 __all__ = [
@@ -60,5 +60,5 @@ __all__ = [
     "TaskSpec",
     "Triple",
     "TripleStatus",
-    "CriticVerdict"
+    "CriticVerdict",
 ]

@@ -10,17 +10,13 @@ Same template as arXiv with the differences specific to Tavily:
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from agentradar_store import TavilyResult
 from agentradar_supervisor.agents.scout.tavily import (
     TavilyArtifact,
     TavilyScout,
 )
-
 
 # ---- Helpers --------------------------------------------------------------
 
@@ -109,7 +105,8 @@ class TestConfidenceWeighting:
     async def test_high_relevance_yields_high_confidence(self, mock_mcp):
         scout = TavilyScout(query="test")
         artifact = TavilyArtifact(
-            result=make_result(score=1.0), query="test",
+            result=make_result(score=1.0),
+            query="test",
         )
         await scout._propose_findings(mock_mcp, artifact, ["X"])
         propose_calls = [c for c in mock_mcp.calls if c["tool"] == "propose_triple"]
@@ -121,7 +118,8 @@ class TestConfidenceWeighting:
     async def test_low_relevance_yields_lower_confidence(self, mock_mcp):
         scout = TavilyScout(query="test")
         artifact = TavilyArtifact(
-            result=make_result(score=0.0), query="test",
+            result=make_result(score=0.0),
+            query="test",
         )
         await scout._propose_findings(mock_mcp, artifact, ["X"])
         propose_calls = [c for c in mock_mcp.calls if c["tool"] == "propose_triple"]
@@ -133,7 +131,8 @@ class TestConfidenceWeighting:
         """Even with score=1.0 the cap should be 0.7; we never propose at >0.7."""
         scout = TavilyScout(query="test")
         artifact = TavilyArtifact(
-            result=make_result(score=1.0), query="test",
+            result=make_result(score=1.0),
+            query="test",
         )
         await scout._propose_findings(mock_mcp, artifact, ["X"])
         propose_calls = [c for c in mock_mcp.calls if c["tool"] == "propose_triple"]
@@ -166,10 +165,12 @@ class TestRunOrchestration:
     @pytest.mark.asyncio
     async def test_dedupes_by_url(self, mock_mcp, mock_tavily, mock_slm):
         # Two results with same URL — should be deduped
-        mock_tavily.search_responses = [[
-            make_result("https://x.com/same"),
-            make_result("https://x.com/same"),
-        ]]
+        mock_tavily.search_responses = [
+            [
+                make_result("https://x.com/same"),
+                make_result("https://x.com/same"),
+            ]
+        ]
         mock_slm.responses = [json.dumps({"concepts": []})]
         scout = TavilyScout(query="test")
         summary = await scout.run(mock_mcp)
@@ -179,9 +180,11 @@ class TestRunOrchestration:
 
     @pytest.mark.asyncio
     async def test_full_pipeline(self, mock_mcp, mock_tavily, mock_slm):
-        mock_tavily.search_responses = [[
-            make_result("https://x.com/article-1"),
-        ]]
+        mock_tavily.search_responses = [
+            [
+                make_result("https://x.com/article-1"),
+            ]
+        ]
         mock_slm.responses = [json.dumps({"concepts": ["MCP", "AnthropicAgent"]})]
 
         scout = TavilyScout(query="agent protocols")
@@ -194,11 +197,14 @@ class TestRunOrchestration:
 
     @pytest.mark.asyncio
     async def test_search_failure_returns_error_summary(
-        self, mock_mcp, mock_tavily,
+        self,
+        mock_mcp,
+        mock_tavily,
     ):
         # Override the search to raise
         async def _bomb(*args, **kwargs):
             raise RuntimeError("Tavily down")
+
         mock_tavily.search = _bomb
 
         scout = TavilyScout(query="test")

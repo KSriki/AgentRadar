@@ -17,11 +17,9 @@ import argparse
 import asyncio
 import sys
 
-from fastmcp import Client
-
 from agentradar_core import configure_logging
 from agentradar_supervisor.agents import Forecaster
-
+from fastmcp import Client
 
 MCP_URL = "http://localhost/mcp/"
 
@@ -57,7 +55,8 @@ async def main_async(concept: str | None) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="One-off Forecaster run.")
     parser.add_argument(
-        "--concept", default=None,
+        "--concept",
+        default=None,
         help="Force-forecast this specific concept (default: auto-select)",
     )
     args = parser.parse_args()

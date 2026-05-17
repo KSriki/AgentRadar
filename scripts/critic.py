@@ -13,10 +13,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from fastmcp import Client
-
 from agentradar_core import configure_logging
 from agentradar_supervisor.agents import Critic
+from fastmcp import Client
 
 MCP_URL = "http://localhost/mcp/"
 

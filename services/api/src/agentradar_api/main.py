@@ -10,12 +10,10 @@ Layout:
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import uvicorn
-from fastapi import FastAPI
-
 from agentradar_core import (
     bind_trace_id,
     clear_trace_context,
@@ -28,11 +26,11 @@ from agentradar_store import (
     get_pg_client,
     get_s3_client,
 )
-
-from agentradar_api.rest import router as rest_router
+from fastapi import FastAPI
 
 # Import the MCP server instance with all tools registered
 from agentradar_api.mcp_tools import mcp
+from agentradar_api.rest import router as rest_router
 
 configure_logging()
 log = get_logger(__name__)

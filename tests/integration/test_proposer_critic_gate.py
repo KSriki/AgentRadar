@@ -13,11 +13,9 @@ tests fire immediately — that's the value of pinning architectural claims.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-
 from agentradar_core import Triple, TripleStatus
 
 
@@ -68,13 +66,15 @@ class TestProposerCriticGate:
     @pytest.mark.asyncio
     async def test_approve_commits_to_both_stores(self, clean_pg, clean_neo4j):
         """The approval path: mark_triple_decided + commit_triple_relationship."""
-        proposal = await clean_pg.propose_triple(_make_triple(
-            subject="ROMA",
-            predicate="INSTANCE_OF",
-            object_="Pattern",
-            source_id="test:src2",
-            confidence=0.9,
-        ))
+        proposal = await clean_pg.propose_triple(
+            _make_triple(
+                subject="ROMA",
+                predicate="INSTANCE_OF",
+                object_="Pattern",
+                source_id="test:src2",
+                confidence=0.9,
+            )
+        )
         triple_id = UUID(proposal["triple_id"])
 
         marked = await clean_pg.mark_triple_decided(
@@ -100,13 +100,15 @@ class TestProposerCriticGate:
     @pytest.mark.asyncio
     async def test_reject_marks_pg_only(self, clean_pg, clean_neo4j):
         """reject_triple records the decision but never touches Neo4j."""
-        proposal = await clean_pg.propose_triple(_make_triple(
-            subject="Hallucinated",
-            predicate="INTRODUCED_BY",
-            object_="NobodyReal",
-            source_id="test:bad",
-            confidence=0.4,
-        ))
+        proposal = await clean_pg.propose_triple(
+            _make_triple(
+                subject="Hallucinated",
+                predicate="INTRODUCED_BY",
+                object_="NobodyReal",
+                source_id="test:bad",
+                confidence=0.4,
+            )
+        )
 
         marked = await clean_pg.mark_triple_decided(
             triple_id=UUID(proposal["triple_id"]),
@@ -142,12 +144,18 @@ class TestProposerCriticGate:
     async def test_repropose_with_higher_confidence_updates_in_place(self, clean_pg):
         """Higher confidence on second call wins — same proposal_hash, updated row."""
         low = _make_triple(
-            subject="X", predicate="MENTIONED_IN",
-            object_="src:1", source_id="src:1", confidence=0.4,
+            subject="X",
+            predicate="MENTIONED_IN",
+            object_="src:1",
+            source_id="src:1",
+            confidence=0.4,
         )
         high = _make_triple(
-            subject="X", predicate="MENTIONED_IN",
-            object_="src:1", source_id="src:1", confidence=0.8,
+            subject="X",
+            predicate="MENTIONED_IN",
+            object_="src:1",
+            source_id="src:1",
+            confidence=0.8,
         )
         await clean_pg.propose_triple(low)
         await clean_pg.propose_triple(high)

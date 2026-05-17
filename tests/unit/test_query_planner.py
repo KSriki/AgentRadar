@@ -13,18 +13,17 @@ template logic against well-defined input shapes.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from agentradar_supervisor.query_planner import (
     derive_tavily_queries,
     generate_adjacency_queries,
     generate_corroboration_queries,
     generate_spike_queries,
 )
-
 
 # ---- Helpers --------------------------------------------------------------
 
@@ -43,10 +42,8 @@ def _patch_pg(monkeypatch, *, singletons=None, spikes=None):
         "agentradar_store.get_pg_client",
         "agentradar_supervisor.query_planner.get_pg_client",
     ]:
-        try:
+        with contextlib.suppress(AttributeError):
             monkeypatch.setattr(path, _factory)
-        except AttributeError:
-            pass
     return mock_pg
 
 
@@ -62,10 +59,8 @@ def _patch_neo4j(monkeypatch, *, authorities=None):
         "agentradar_store.get_neo4j_client",
         "agentradar_supervisor.query_planner.get_neo4j_client",
     ]:
-        try:
+        with contextlib.suppress(AttributeError):
             monkeypatch.setattr(path, _factory)
-        except AttributeError:
-            pass
     return mock_n
 
 
@@ -83,12 +78,13 @@ class TestCorroborationStrategy:
 
     @pytest.mark.asyncio
     async def test_each_singleton_becomes_one_query(self, monkeypatch):
-        _patch_pg(monkeypatch, singletons=[
-            {"concept": "Foo", "source_id": "tavily:abc",
-             "observed_at": datetime.now(UTC)},
-            {"concept": "Bar", "source_id": "arxiv:1234",
-             "observed_at": datetime.now(UTC)},
-        ])
+        _patch_pg(
+            monkeypatch,
+            singletons=[
+                {"concept": "Foo", "source_id": "tavily:abc", "observed_at": datetime.now(UTC)},
+                {"concept": "Bar", "source_id": "arxiv:1234", "observed_at": datetime.now(UTC)},
+            ],
+        )
         queries = await generate_corroboration_queries(limit=5)
         assert len(queries) == 2
         # Concept name should appear in the generated query
@@ -99,16 +95,17 @@ class TestCorroborationStrategy:
     async def test_query_includes_disambiguation_terms(self, monkeypatch):
         """A bare concept name like 'Apple' is ambiguous; the template should
         add agentic-AI context terms to disambiguate."""
-        _patch_pg(monkeypatch, singletons=[
-            {"concept": "MCP", "source_id": "tavily:x",
-             "observed_at": datetime.now(UTC)},
-        ])
+        _patch_pg(
+            monkeypatch,
+            singletons=[
+                {"concept": "MCP", "source_id": "tavily:x", "observed_at": datetime.now(UTC)},
+            ],
+        )
         queries = await generate_corroboration_queries(limit=5)
         assert len(queries) == 1
         # The template adds agentic-AI context (framework/protocol/tool)
         assert any(
-            term in queries[0].lower()
-            for term in ("agent", "framework", "protocol", "tool")
+            term in queries[0].lower() for term in ("agent", "framework", "protocol", "tool")
         )
 
 
@@ -123,10 +120,13 @@ class TestSpikeStrategy:
 
     @pytest.mark.asyncio
     async def test_each_spike_becomes_one_query(self, monkeypatch):
-        _patch_pg(monkeypatch, spikes=[
-            {"concept": "MCP", "recent_count": 8, "prior_count": 1},
-            {"concept": "AutoGen", "recent_count": 5, "prior_count": 2},
-        ])
+        _patch_pg(
+            monkeypatch,
+            spikes=[
+                {"concept": "MCP", "recent_count": 8, "prior_count": 1},
+                {"concept": "AutoGen", "recent_count": 5, "prior_count": 2},
+            ],
+        )
         queries = await generate_spike_queries(limit=5)
         assert len(queries) == 2
         assert any("MCP" in q for q in queries)
@@ -135,14 +135,14 @@ class TestSpikeStrategy:
     @pytest.mark.asyncio
     async def test_query_includes_announcement_keywords(self, monkeypatch):
         """Spike queries should look for launch/announcement signals."""
-        _patch_pg(monkeypatch, spikes=[
-            {"concept": "Foo", "recent_count": 6, "prior_count": 0},
-        ])
-        queries = await generate_spike_queries(limit=5)
-        assert any(
-            kw in queries[0].lower()
-            for kw in ("announcement", "launch", "release")
+        _patch_pg(
+            monkeypatch,
+            spikes=[
+                {"concept": "Foo", "recent_count": 6, "prior_count": 0},
+            ],
         )
+        queries = await generate_spike_queries(limit=5)
+        assert any(kw in queries[0].lower() for kw in ("announcement", "launch", "release"))
 
 
 class TestAdjacencyStrategy:
@@ -156,10 +156,13 @@ class TestAdjacencyStrategy:
 
     @pytest.mark.asyncio
     async def test_each_authority_becomes_one_query(self, monkeypatch):
-        _patch_neo4j(monkeypatch, authorities=[
-            {"authority": "Anthropic", "concept_count": 5},
-            {"authority": "Google", "concept_count": 3},
-        ])
+        _patch_neo4j(
+            monkeypatch,
+            authorities=[
+                {"authority": "Anthropic", "concept_count": 5},
+                {"authority": "Google", "concept_count": 3},
+            ],
+        )
         queries = await generate_adjacency_queries(limit=5)
         assert len(queries) == 2
         assert any("Anthropic" in q for q in queries)
@@ -168,16 +171,16 @@ class TestAdjacencyStrategy:
     @pytest.mark.asyncio
     async def test_query_targets_new_things_from_authority(self, monkeypatch):
         """Adjacency template should ask for *new* things from the authority."""
-        _patch_neo4j(monkeypatch, authorities=[
-            {"authority": "OpenAI", "concept_count": 4},
-        ])
+        _patch_neo4j(
+            monkeypatch,
+            authorities=[
+                {"authority": "OpenAI", "concept_count": 4},
+            ],
+        )
         queries = await generate_adjacency_queries(limit=5)
         assert "OpenAI" in queries[0]
         # 'new' or 'recent' or similar — we want forward-looking signal
-        assert any(
-            kw in queries[0].lower()
-            for kw in ("new", "framework", "tool", "protocol")
-        )
+        assert any(kw in queries[0].lower() for kw in ("new", "framework", "tool", "protocol"))
 
 
 # ---- derive_tavily_queries — orchestration --------------------------------
@@ -198,16 +201,18 @@ class TestDeriveTavilyQueries:
         _patch_pg(
             monkeypatch,
             singletons=[
-                {"concept": "Foo", "source_id": "x:1",
-                 "observed_at": datetime.now(UTC)},
+                {"concept": "Foo", "source_id": "x:1", "observed_at": datetime.now(UTC)},
             ],
             spikes=[
                 {"concept": "Bar", "recent_count": 5, "prior_count": 1},
             ],
         )
-        _patch_neo4j(monkeypatch, authorities=[
-            {"authority": "Baz", "concept_count": 3},
-        ])
+        _patch_neo4j(
+            monkeypatch,
+            authorities=[
+                {"authority": "Baz", "concept_count": 3},
+            ],
+        )
         queries = await derive_tavily_queries()
         assert len(queries) == 3
         # All three concepts/authorities should appear somewhere
@@ -222,10 +227,13 @@ class TestDeriveTavilyQueries:
         # Force collision: a singleton 'X' AND a spike on 'X' might template
         # the same way — depends on templates. Easier deterministic test:
         # ensure two singletons with same name produce only one query.
-        _patch_pg(monkeypatch, singletons=[
-            {"concept": "Foo", "source_id": "a:1", "observed_at": datetime.now(UTC)},
-            {"concept": "Foo", "source_id": "b:2", "observed_at": datetime.now(UTC)},
-        ])
+        _patch_pg(
+            monkeypatch,
+            singletons=[
+                {"concept": "Foo", "source_id": "a:1", "observed_at": datetime.now(UTC)},
+                {"concept": "Foo", "source_id": "b:2", "observed_at": datetime.now(UTC)},
+            ],
+        )
         _patch_neo4j(monkeypatch)
         queries = await derive_tavily_queries()
         # Should have ≤1 unique 'Foo' query, not two duplicates
@@ -237,24 +245,24 @@ class TestDeriveTavilyQueries:
         """If one strategy raises, others still contribute their queries."""
         # Set up Postgres mock that raises for spikes but works for singletons
         mock_pg = MagicMock()
-        mock_pg.find_singleton_concepts = AsyncMock(return_value=[
-            {"concept": "Survives", "source_id": "x:1",
-             "observed_at": datetime.now(UTC)},
-        ])
-        mock_pg.find_velocity_spikes = AsyncMock(
-            side_effect=Exception("spikes query exploded")
+        mock_pg.find_singleton_concepts = AsyncMock(
+            return_value=[
+                {"concept": "Survives", "source_id": "x:1", "observed_at": datetime.now(UTC)},
+            ]
         )
+        mock_pg.find_velocity_spikes = AsyncMock(side_effect=Exception("spikes query exploded"))
         for path in [
             "agentradar_supervisor.query_planner.get_pg_client",
             "agentradar_store.get_pg_client",
         ]:
-            try:
+            with contextlib.suppress(AttributeError):
                 monkeypatch.setattr(path, lambda: mock_pg)
-            except AttributeError:
-                pass
-        _patch_neo4j(monkeypatch, authorities=[
-            {"authority": "AlsoSurvives", "concept_count": 2},
-        ])
+        _patch_neo4j(
+            monkeypatch,
+            authorities=[
+                {"authority": "AlsoSurvives", "concept_count": 2},
+            ],
+        )
 
         queries = await derive_tavily_queries()
         joined = " ".join(queries)

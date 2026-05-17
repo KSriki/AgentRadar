@@ -11,10 +11,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from fastmcp import Client
-
 from agentradar_core import configure_logging
 from agentradar_supervisor.agents import TavilyScout
+from fastmcp import Client
 
 MCP_URL = "http://localhost/mcp/"
 
@@ -35,7 +34,8 @@ async def main_async(query: str, max_results: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="One-off Tavily Scout run.")
     parser.add_argument(
-        "--query", default="new agentic AI protocols 2026",
+        "--query",
+        default="new agentic AI protocols 2026",
         help="Search query for Tavily",
     )
     parser.add_argument("--max", type=int, default=8)

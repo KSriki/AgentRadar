@@ -12,16 +12,15 @@ Mocks: HTTP (feedparser input), MCP, SLM. Tests cover:
 from __future__ import annotations
 
 import json
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from agentradar_supervisor.agents.scout.arxiv import (
     ArxivPaper,
     ArxivScout,
 )
-
 
 # ---- Helpers --------------------------------------------------------------
 
@@ -55,7 +54,7 @@ class TestArxivPaperShape:
     def test_arxiv_paper_is_immutable(self):
         """Frozen dataclass — should reject mutation."""
         paper = make_paper()
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             paper.arxiv_id = "different"  # type: ignore
 
 
@@ -75,9 +74,7 @@ class TestExtractConcepts:
     @pytest.mark.asyncio
     async def test_markdown_fenced_json_handled(self, mock_slm):
         """Smaller models often emit ```json ... ``` despite instructions."""
-        mock_slm.responses = [
-            '```json\n{"concepts": ["MCP", "ReAct"]}\n```'
-        ]
+        mock_slm.responses = ['```json\n{"concepts": ["MCP", "ReAct"]}\n```']
         scout = ArxivScout()
         concepts = await scout._extract_concepts(make_paper())
         assert concepts == ["MCP", "ReAct"]
@@ -100,18 +97,14 @@ class TestExtractConcepts:
     @pytest.mark.asyncio
     async def test_filters_non_string_entries(self, mock_slm):
         """If SLM hallucinates non-string items in the array, drop them."""
-        mock_slm.responses = [json.dumps({
-            "concepts": ["GoodOne", None, 42, "AnotherGood", ""]
-        })]
+        mock_slm.responses = [json.dumps({"concepts": ["GoodOne", None, 42, "AnotherGood", ""]})]
         scout = ArxivScout()
         concepts = await scout._extract_concepts(make_paper())
         assert concepts == ["GoodOne", "AnotherGood"]
 
     @pytest.mark.asyncio
     async def test_filters_whitespace_only_entries(self, mock_slm):
-        mock_slm.responses = [json.dumps({
-            "concepts": ["MCP", "   ", "\t", "LangGraph"]
-        })]
+        mock_slm.responses = [json.dumps({"concepts": ["MCP", "   ", "\t", "LangGraph"]})]
         scout = ArxivScout()
         concepts = await scout._extract_concepts(make_paper())
         assert concepts == ["MCP", "LangGraph"]
@@ -128,9 +121,9 @@ class TestExtractConcepts:
         """Verify the SLM is given both title and abstract for context."""
         mock_slm.responses = [json.dumps({"concepts": []})]
         scout = ArxivScout()
-        await scout._extract_concepts(make_paper(
-            title="Specific Title", summary="Specific Abstract"
-        ))
+        await scout._extract_concepts(
+            make_paper(title="Specific Title", summary="Specific Abstract")
+        )
         assert len(mock_slm.calls) == 1
         user_msg = mock_slm.calls[0]["user"]
         assert "Specific Title" in user_msg
@@ -147,7 +140,7 @@ class TestProposeFindings:
     async def test_records_mention_per_concept(self, mock_mcp):
         scout = ArxivScout()
         paper = make_paper()
-        stats = await scout._propose_findings(mock_mcp, paper, ["MCP", "ReAct"])
+        await scout._propose_findings(mock_mcp, paper, ["MCP", "ReAct"])
 
         mention_calls = [c for c in mock_mcp.calls if c["tool"] == "record_mention"]
         assert len(mention_calls) == 2
@@ -224,7 +217,9 @@ class TestRunOrchestration:
 
     @pytest.mark.asyncio
     async def test_paper_with_no_concepts_does_not_propose(
-        self, mock_mcp, mock_slm,
+        self,
+        mock_mcp,
+        mock_slm,
     ):
         """SLM returns empty concepts → no record_mention or propose_triple."""
         mock_slm.responses = [json.dumps({"concepts": []})]
@@ -237,8 +232,7 @@ class TestRunOrchestration:
         assert summary["triples_proposed"] == 0
         # Only the put_text_artifact call should have happened
         proposal_calls = [
-            c for c in mock_mcp.calls
-            if c["tool"] in ("record_mention", "propose_triple")
+            c for c in mock_mcp.calls if c["tool"] in ("record_mention", "propose_triple")
         ]
         assert len(proposal_calls) == 0
 
@@ -261,5 +255,5 @@ class TestRunOrchestration:
         for c in mock_mcp.calls:
             tool_counts[c["tool"]] = tool_counts.get(c["tool"], 0) + 1
         assert tool_counts.get("put_text_artifact") == 1  # one artifact stored
-        assert tool_counts.get("record_mention") == 2     # two concepts
+        assert tool_counts.get("record_mention") == 2  # two concepts
         assert tool_counts.get("propose_triple") == 2

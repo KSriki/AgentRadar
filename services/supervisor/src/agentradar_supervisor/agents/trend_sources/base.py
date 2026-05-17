@@ -18,11 +18,11 @@ from typing import Any, Protocol
 class TrendItem:
     """One trend signal from any source. Self-describing."""
 
-    source_kind: str       # "github" | "hn" | "lab_rss" — discriminator
-    url: str               # the canonical URL of the trend item
-    title: str             # display title
-    summary: str           # description, README excerpt, story title — the
-                           # piece of text the SLM will extract concepts from
+    source_kind: str  # "github" | "hn" | "lab_rss" — discriminator
+    url: str  # the canonical URL of the trend item
+    title: str  # display title
+    summary: str  # description, README excerpt, story title — the
+    # piece of text the SLM will extract concepts from
     published_at: datetime
     extra: dict[str, Any] = field(default_factory=dict)
     # ^ source-specific fields (stars, points, author) that we want to

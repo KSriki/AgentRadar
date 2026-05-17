@@ -13,12 +13,12 @@ Per the SLM-where-needed principle:
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
 from agentradar_core import get_logger
 from agentradar_store import get_slm_client
+
 from agentradar_supervisor.state import (
     CandidateForecast,
     DigestSynthesis,
@@ -78,22 +78,23 @@ async def plan(state: ForecastState) -> dict[str, Any]:
     if kind == "forecast.top_n":
         n = task.get("top_n", 5)
         try:
-            result = await mcp.call_tool("select_top_n_concepts", {
-                "top_n": n,
-                "velocity_window_days": 90,
-                "cooldown_days": 14,
-            })
+            result = await mcp.call_tool(
+                "select_top_n_concepts",
+                {
+                    "top_n": n,
+                    "velocity_window_days": 90,
+                    "cooldown_days": 14,
+                },
+            )
             concept_names = result.data.get("concept_names", [])
         except Exception as exc:
             log.exception("roma.plan.topn_select_failed", error=str(exc))
             return {"subtasks": []}
 
         subtasks: list[ForecastTask] = [
-            {"kind": "forecast.concept", "concept_name": c}
-            for c in concept_names
+            {"kind": "forecast.concept", "concept_name": c} for c in concept_names
         ]
-        log.info("roma.plan.topn_planned", count=len(subtasks),
-                 concepts=concept_names)
+        log.info("roma.plan.topn_planned", count=len(subtasks), concepts=concept_names)
         return {"subtasks": subtasks}
 
     if kind == "forecast.digest":
@@ -135,7 +136,8 @@ async def execute(state: ForecastState) -> dict[str, Any]:
 
 
 async def _execute_subtasks(
-    state: ForecastState, subtasks: list[ForecastTask],
+    state: ForecastState,
+    subtasks: list[ForecastTask],
 ) -> dict[str, Any]:
     """Recursively invoke ROMA for each subtask. Sequential."""
     # Lazy import to dodge a circular reference at module load
@@ -148,7 +150,9 @@ async def _execute_subtasks(
 
     log.info(
         "roma.execute.recurse_start",
-        parent_kind=parent_kind, depth=depth, subtask_count=len(subtasks),
+        parent_kind=parent_kind,
+        depth=depth,
+        subtask_count=len(subtasks),
     )
 
     graph = get_roma_graph()
@@ -156,7 +160,8 @@ async def _execute_subtasks(
     for i, sub in enumerate(subtasks):
         log.info(
             "roma.execute.recurse_subtask",
-            parent_kind=parent_kind, subtask_index=i,
+            parent_kind=parent_kind,
+            subtask_index=i,
             subtask_kind=sub.get("kind"),
         )
         sub_state: ForecastState = {
@@ -172,15 +177,18 @@ async def _execute_subtasks(
         except Exception as exc:
             log.warning(
                 "roma.execute.subtask_failed",
-                parent_kind=parent_kind, subtask_index=i, error=str(exc),
+                parent_kind=parent_kind,
+                subtask_index=i,
+                error=str(exc),
             )
             results.append({"error": str(exc), "subtask": sub})
             continue
 
         # Capture whichever final-field the child produced
         if sub_final.get("final_forecast"):
-            results.append({"forecast": sub_final["final_forecast"],
-                            "band": sub_final.get("confidence_band")})
+            results.append(
+                {"forecast": sub_final["final_forecast"], "band": sub_final.get("confidence_band")}
+            )
         elif sub_final.get("final_topn"):
             results.append({"topn": sub_final["final_topn"]})
         else:
@@ -189,7 +197,8 @@ async def _execute_subtasks(
 
     log.info(
         "roma.execute.recurse_done",
-        parent_kind=parent_kind, results_count=len(results),
+        parent_kind=parent_kind,
+        results_count=len(results),
     )
     return {"subtask_results": results}
 
@@ -198,8 +207,7 @@ async def _execute_atomic(state: ForecastState) -> dict[str, Any]:
     """The Session 1 atomic path: forecast one concept."""
     task = state["task"]
     if task.get("kind") != "forecast.concept":
-        log.warning("roma.execute.unsupported_atomic_kind",
-                    kind=task.get("kind"))
+        log.warning("roma.execute.unsupported_atomic_kind", kind=task.get("kind"))
         return {"evidence": {}, "candidate_forecast": {}}
 
     concept_name = task.get("concept_name", "")
@@ -212,19 +220,20 @@ async def _execute_atomic(state: ForecastState) -> dict[str, Any]:
         log.error("roma.execute.no_mcp_in_state")
         return {"evidence": {}, "candidate_forecast": {}}
 
-    log.info("roma.execute.start",
-             concept=concept_name, depth=state.get("depth", 0))
+    log.info("roma.execute.start", concept=concept_name, depth=state.get("depth", 0))
 
     # Gather evidence via MCP
     try:
-        result = await mcp.call_tool("get_forecast_evidence", {
-            "concept_name": concept_name,
-            "velocity_window_days": 90,
-        })
+        result = await mcp.call_tool(
+            "get_forecast_evidence",
+            {
+                "concept_name": concept_name,
+                "velocity_window_days": 90,
+            },
+        )
         evidence = result.data
     except Exception as exc:
-        log.exception("roma.execute.evidence_failed",
-                      concept=concept_name, error=str(exc))
+        log.exception("roma.execute.evidence_failed", concept=concept_name, error=str(exc))
         return {"evidence": {}, "candidate_forecast": {}}
 
     log.info(
@@ -237,7 +246,9 @@ async def _execute_atomic(state: ForecastState) -> dict[str, Any]:
     parent_ctx = state.get("parent_context", {})
     context_hint = (
         f"\n\nThis forecast is part of a top-{state.get('parent_context', {}).get('subtask_index', '')+1 if 'subtask_index' in parent_ctx else 'N'} "
-        f"series within a digest." if "subtask_index" in parent_ctx else ""
+        f"series within a digest."
+        if "subtask_index" in parent_ctx
+        else ""
     )
     system_prompt = (
         "You are a forecaster specialized in agentic-AI ecosystem dynamics. "
@@ -245,12 +256,11 @@ async def _execute_atomic(state: ForecastState) -> dict[str, Any]:
         "prediction. Be concrete: 'will X' or 'will not X' or 'partially Y'. "
         "Avoid hedging.\n\n"
         "The confidence field is a DECIMAL between 0.0 and 1.0 (not a percentage). "  # <-- explicit
-        "Examples: 0.3 = low confidence, 0.6 = moderate, 0.85 = strong.\n\n"           # <-- examples help
+        "Examples: 0.3 = low confidence, 0.6 = moderate, 0.85 = strong.\n\n"  # <-- examples help
         "The prediction field is ONE STRING (one prediction). "
         "The horizon_months field is ONE INTEGER from 1 to 24 — choose the "
         "horizon (3, 6, or 12 are common) that best fits available signal. "
-        "Sparse evidence warrants longer horizons."
-        + context_hint
+        "Sparse evidence warrants longer horizons." + context_hint
     )
     user_prompt = (
         f"CONCEPT: {concept_name}\n\n"
@@ -271,8 +281,10 @@ async def _execute_atomic(state: ForecastState) -> dict[str, Any]:
     }
 
     raw = await slm.generate(
-        system=system_prompt, user=user_prompt,
-        max_tokens=600, temperature=0.2,
+        system=system_prompt,
+        user=user_prompt,
+        max_tokens=600,
+        temperature=0.2,
         response_format=forecast_schema,
     )
     raw = raw.strip()
@@ -286,7 +298,7 @@ async def _execute_atomic(state: ForecastState) -> dict[str, Any]:
         # or unbounded integer instead of decimal in [0, 1]. The model's
         # intent is usually recoverable; weak-fallback is a stronger
         # response than this deserves.
-        if "confidence" in parsed and isinstance(parsed["confidence"], (int, float)):
+        if "confidence" in parsed and isinstance(parsed["confidence"], int | float):
             c = float(parsed["confidence"])
             if c > 1.0:
                 # 70 → 0.70, 7 → 0.7, 0.85 stays 0.85
@@ -296,20 +308,25 @@ async def _execute_atomic(state: ForecastState) -> dict[str, Any]:
                     c = c / 100.0
                 else:
                     c = 1.0  # garbage; cap rather than fail
-                log.info("roma.execute.confidence_normalized",
-                         original=parsed["confidence"], normalized=c)
+                log.info(
+                    "roma.execute.confidence_normalized",
+                    original=parsed["confidence"],
+                    normalized=c,
+                )
                 parsed["confidence"] = c
 
         candidate = CandidateForecast(**parsed)
-        log.info("roma.execute.forecast_drafted",
-                 concept=concept_name, confidence=candidate.confidence)
+        log.info(
+            "roma.execute.forecast_drafted", concept=concept_name, confidence=candidate.confidence
+        )
         return {
             "evidence": evidence,
             "candidate_forecast": candidate.model_dump(),
         }
     except (json.JSONDecodeError, ValueError) as exc:
-        log.warning("roma.execute.bad_forecast_json",
-                    concept=concept_name, error=str(exc), raw=raw[:200])
+        log.warning(
+            "roma.execute.bad_forecast_json", concept=concept_name, error=str(exc), raw=raw[:200]
+        )
         return {"evidence": evidence, "candidate_forecast": {}}
 
 
@@ -390,9 +407,12 @@ def _aggregate_concept(state: ForecastState) -> dict[str, Any]:
         "cited_concept_ids": candidate.get("cited_concept_ids", []),
         "evidence_snapshot": evidence,
     }
-    log.info("roma.aggregate.concept_done",
-             concept=task.get("concept_name"),
-             band=band, confidence=raw_confidence)
+    log.info(
+        "roma.aggregate.concept_done",
+        concept=task.get("concept_name"),
+        band=band,
+        confidence=raw_confidence,
+    )
     return {"final_forecast": final_forecast, "confidence_band": band}
 
 
@@ -440,15 +460,18 @@ async def _aggregate_digest(state: ForecastState) -> dict[str, Any]:
 
     # SLM synthesis — bounded job: themes paragraph + standout pick
     slm = get_slm_client()
-    digest_input = json.dumps([
-        {
-            "concept": f["concept_name"],
-            "claim": f["prediction"],
-            "confidence": f["confidence"],
-            "horizon_months": f.get("horizon_months", 6),
-        }
-        for f in forecasts
-    ], indent=2)
+    digest_input = json.dumps(
+        [
+            {
+                "concept": f["concept_name"],
+                "claim": f["prediction"],
+                "confidence": f["confidence"],
+                "horizon_months": f.get("horizon_months", 6),
+            }
+            for f in forecasts
+        ],
+        indent=2,
+    )
 
     synthesis_schema = {
         "type": "object",
@@ -469,8 +492,10 @@ async def _aggregate_digest(state: ForecastState) -> dict[str, Any]:
 
     try:
         raw = await slm.generate(
-            system=system, user=user,
-            max_tokens=400, temperature=0.3,
+            system=system,
+            user=user,
+            max_tokens=400,
+            temperature=0.3,
             response_format=synthesis_schema,
         )
         raw = raw.strip()
@@ -493,8 +518,12 @@ async def _aggregate_digest(state: ForecastState) -> dict[str, Any]:
         "forecasts": forecasts,
         "average_confidence": avg_confidence,
     }
-    log.info("roma.aggregate.digest_done",
-             count=len(forecasts), band=band, average_confidence=avg_confidence)
+    log.info(
+        "roma.aggregate.digest_done",
+        count=len(forecasts),
+        band=band,
+        average_confidence=avg_confidence,
+    )
     return {"final_digest": final_digest, "confidence_band": band}
 
 

@@ -17,14 +17,12 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from agentradar_supervisor.agents.critic import (
-    Critic,
-    KNOWN_PREDICATES,
-    TripleToReview,
     _CYPHER_IDENT,
+    KNOWN_PREDICATES,
+    Critic,
+    TripleToReview,
 )
-
 
 # ---- Helpers --------------------------------------------------------------
 
@@ -78,29 +76,35 @@ class TestStructuralCheck:
         assert ok is False
         assert "source_id" in reason.lower()
 
-    @pytest.mark.parametrize("bad_predicate", [
-        "lower_case",          # must start with uppercase
-        "Has_Spaces in it",    # no spaces
-        "WITH-DASH",           # no dashes
-        "1STARTS_WITH_DIGIT",  # must start with letter
-        "",                    # empty
-        "A" * 65,              # too long (regex caps at 64)
-    ])
+    @pytest.mark.parametrize(
+        "bad_predicate",
+        [
+            "lower_case",  # must start with uppercase
+            "Has_Spaces in it",  # no spaces
+            "WITH-DASH",  # no dashes
+            "1STARTS_WITH_DIGIT",  # must start with letter
+            "",  # empty
+            "A" * 65,  # too long (regex caps at 64)
+        ],
+    )
     def test_invalid_predicate_rejected(self, bad_predicate):
         critic = Critic()
         ok, reason = critic._structural_check(make_triple(predicate=bad_predicate))
         assert ok is False
         assert "predicate" in reason.lower()
 
-    @pytest.mark.parametrize("good_predicate", [
-        "X",                                 # minimum: single uppercase letter
-        "MENTIONED_IN",
-        "INTRODUCED_BY",
-        "A1234",
-        "A" * 64,                            # exactly at the regex limit
-    ])
+    @pytest.mark.parametrize(
+        "good_predicate",
+        [
+            "X",  # minimum: single uppercase letter
+            "MENTIONED_IN",
+            "INTRODUCED_BY",
+            "A1234",
+            "A" * 64,  # exactly at the regex limit
+        ],
+    )
     def test_valid_predicate_accepted(self, good_predicate):
-        critic = Critic()
+        Critic()
         # Use the regex directly to verify shape, since structural_check ALSO
         # requires the predicate to pass — but ontology might reject novel ones.
         # Here we're testing the regex layer, not ontology.
@@ -139,10 +143,12 @@ class TestFaithfulnessCheck:
     @pytest.mark.asyncio
     async def test_approved_response_parsed(self, mock_slm, monkeypatch):
         # Mock S3 to return a fake arxiv artifact
-        fake_payload = json.dumps({
-            "title": "MCP: Model Context Protocol",
-            "summary": "Anthropic introduces MCP for agent tool integration."
-        })
+        fake_payload = json.dumps(
+            {
+                "title": "MCP: Model Context Protocol",
+                "summary": "Anthropic introduces MCP for agent tool integration.",
+            }
+        )
 
         mock_s3 = MagicMock()
         mock_s3.get_artifact = AsyncMock(return_value=fake_payload.encode())
@@ -152,15 +158,21 @@ class TestFaithfulnessCheck:
         )
 
         # Queue the SLM response
-        mock_slm.responses = [json.dumps({
-            "verdict": "approved",
-            "reasoning": "Source explicitly states MCP introduced by Anthropic",
-            "confidence": 0.9,
-        })]
+        mock_slm.responses = [
+            json.dumps(
+                {
+                    "verdict": "approved",
+                    "reasoning": "Source explicitly states MCP introduced by Anthropic",
+                    "confidence": 0.9,
+                }
+            )
+        ]
 
         critic = Critic()
         triple = make_triple(
-            subject="MCP", predicate="INTRODUCED_BY", object="Anthropic",
+            subject="MCP",
+            predicate="INTRODUCED_BY",
+            object="Anthropic",
             source_id="arxiv:2401.12345",
         )
         approved, reasoning, confidence = await critic._faithfulness_check(triple)
@@ -174,10 +186,12 @@ class TestFaithfulnessCheck:
 
     @pytest.mark.asyncio
     async def test_rejected_response_parsed(self, mock_slm, monkeypatch):
-        fake_payload = json.dumps({
-            "title": "Some unrelated paper",
-            "summary": "Discusses transformer architectures.",
-        })
+        fake_payload = json.dumps(
+            {
+                "title": "Some unrelated paper",
+                "summary": "Discusses transformer architectures.",
+            }
+        )
         mock_s3 = MagicMock()
         mock_s3.get_artifact = AsyncMock(return_value=fake_payload.encode())
         monkeypatch.setattr(
@@ -185,11 +199,15 @@ class TestFaithfulnessCheck:
             lambda: mock_s3,
         )
 
-        mock_slm.responses = [json.dumps({
-            "verdict": "rejected",
-            "reasoning": "Source does not mention MCP",
-            "confidence": 0.85,
-        })]
+        mock_slm.responses = [
+            json.dumps(
+                {
+                    "verdict": "rejected",
+                    "reasoning": "Source does not mention MCP",
+                    "confidence": 0.85,
+                }
+            )
+        ]
 
         critic = Critic()
         triple = make_triple(source_id="arxiv:9999.99999")
@@ -246,9 +264,15 @@ class TestFaithfulnessCheck:
             lambda: mock_s3,
         )
 
-        mock_slm.responses = [json.dumps({
-            "verdict": "maybe", "reasoning": "?", "confidence": 0.5,
-        })]
+        mock_slm.responses = [
+            json.dumps(
+                {
+                    "verdict": "maybe",
+                    "reasoning": "?",
+                    "confidence": 0.5,
+                }
+            )
+        ]
 
         critic = Critic()
         approved, reasoning, _ = await critic._faithfulness_check(make_triple())
@@ -295,9 +319,13 @@ class TestSourcePrefixDispatch:
 
     @pytest.mark.asyncio
     async def test_tavily_prefix_renders_title_url_content(self, monkeypatch):
-        payload = json.dumps({
-            "title": "T", "url": "https://x.com", "content": "C",
-        }).encode()
+        payload = json.dumps(
+            {
+                "title": "T",
+                "url": "https://x.com",
+                "content": "C",
+            }
+        ).encode()
         mock_s3 = MagicMock()
         mock_s3.get_artifact = AsyncMock(return_value=payload)
         monkeypatch.setattr(
@@ -358,17 +386,22 @@ class TestReviewOne:
             "agentradar_supervisor.agents.critic.get_s3_client",
             lambda: mock_s3,
         )
-        mock_slm.responses = [json.dumps({
-            "verdict": "approved", "reasoning": "yes", "confidence": 0.9,
-        })]
+        mock_slm.responses = [
+            json.dumps(
+                {
+                    "verdict": "approved",
+                    "reasoning": "yes",
+                    "confidence": 0.9,
+                }
+            )
+        ]
 
         critic = Critic(dry_run=True)
         await critic._review_one(mock_mcp, make_triple())
 
         # In dry run, NO MCP calls should have been made
         approve_or_reject = [
-            c for c in mock_mcp.calls
-            if c["tool"] in ("approve_triple", "reject_triple")
+            c for c in mock_mcp.calls if c["tool"] in ("approve_triple", "reject_triple")
         ]
         assert len(approve_or_reject) == 0
 
@@ -381,9 +414,15 @@ class TestReviewOne:
             "agentradar_supervisor.agents.critic.get_s3_client",
             lambda: mock_s3,
         )
-        mock_slm.responses = [json.dumps({
-            "verdict": "approved", "reasoning": "yes", "confidence": 0.9,
-        })]
+        mock_slm.responses = [
+            json.dumps(
+                {
+                    "verdict": "approved",
+                    "reasoning": "yes",
+                    "confidence": 0.9,
+                }
+            )
+        ]
 
         critic = Critic(dry_run=False)
         await critic._review_one(mock_mcp, make_triple())
@@ -393,7 +432,10 @@ class TestReviewOne:
 
     @pytest.mark.asyncio
     async def test_rejection_calls_reject_triple_with_stage(
-        self, mock_mcp, mock_slm, monkeypatch,
+        self,
+        mock_mcp,
+        mock_slm,
+        monkeypatch,
     ):
         critic = Critic(dry_run=False)
         triple = make_triple(predicate="HALLUCINATED")  # ontology rejection

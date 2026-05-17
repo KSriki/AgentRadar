@@ -14,7 +14,6 @@ import json
 from typing import Protocol
 
 import httpx
-
 from agentradar_core import SLMSettings, get_logger, settings
 
 log = get_logger(__name__)
@@ -79,9 +78,7 @@ class OllamaClient:
             "stream": False,
             "options": {
                 "num_predict": max_tokens or self._cfg.max_tokens,
-                "temperature": temperature
-                if temperature is not None
-                else self._cfg.temperature,
+                "temperature": temperature if temperature is not None else self._cfg.temperature,
             },
         }
         # Ollama's `format` param accepts a JSON schema dict (since 0.5) and
@@ -129,9 +126,7 @@ class BedrockClient:
             body: dict = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": max_tokens or self._cfg.max_tokens,
-                "temperature": temperature
-                if temperature is not None
-                else self._cfg.temperature,
+                "temperature": temperature if temperature is not None else self._cfg.temperature,
                 "system": system,
                 "messages": [{"role": "user", "content": user}],
             }
@@ -141,9 +136,8 @@ class BedrockClient:
             # adherence means this works in practice. When we wire actual
             # tool-use mode in Session 2, this becomes properly enforced.
             if response_format is not None:
-                body["system"] += (
-                    "\n\nReturn ONLY valid JSON matching this schema:\n"
-                    + json.dumps(response_format)
+                body["system"] += "\n\nReturn ONLY valid JSON matching this schema:\n" + json.dumps(
+                    response_format
                 )
 
             resp = await br.invoke_model(
@@ -189,7 +183,5 @@ def get_slm_client() -> SLMClient:
                 model=settings.slm.bedrock_model_id,
             )
         else:
-            raise NotImplementedError(
-                f"SLM provider {settings.slm.provider!r} not supported"
-            )
+            raise NotImplementedError(f"SLM provider {settings.slm.provider!r} not supported")
     return _singleton

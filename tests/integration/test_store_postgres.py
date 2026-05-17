@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from agentradar_core import SourceType, Triple, TripleStatus
-
 
 pytestmark = pytest.mark.integration
 
@@ -20,8 +18,12 @@ class TestPostgresHealthcheck:
 class TestProposeTriple:
     async def test_first_proposal_inserts(self, clean_pg) -> None:
         triple = Triple(
-            subject="MCP", predicate="INTRODUCED_BY", object="Anthropic",
-            source_id="src-1", confidence=0.8, proposer_agent="scout",
+            subject="MCP",
+            predicate="INTRODUCED_BY",
+            object="Anthropic",
+            source_id="src-1",
+            confidence=0.8,
+            proposer_agent="scout",
         )
         result = await clean_pg.propose_triple(triple)
 
@@ -33,8 +35,12 @@ class TestProposeTriple:
     async def test_duplicate_proposal_is_idempotent(self, clean_pg) -> None:
         """Re-proposing same triple shouldn't create a second pending row."""
         triple = Triple(
-            subject="A", predicate="X", object="B",
-            source_id="s1", confidence=0.5, proposer_agent="scout",
+            subject="A",
+            predicate="X",
+            object="B",
+            source_id="s1",
+            confidence=0.5,
+            proposer_agent="scout",
         )
         await clean_pg.propose_triple(triple)
         await clean_pg.propose_triple(triple)
@@ -44,12 +50,20 @@ class TestProposeTriple:
 
     async def test_duplicate_with_higher_confidence_wins(self, clean_pg) -> None:
         triple_low = Triple(
-            subject="A", predicate="X", object="B",
-            source_id="s1", confidence=0.3, proposer_agent="scout",
+            subject="A",
+            predicate="X",
+            object="B",
+            source_id="s1",
+            confidence=0.3,
+            proposer_agent="scout",
         )
         triple_high = Triple(
-            subject="A", predicate="X", object="B",
-            source_id="s1", confidence=0.9, proposer_agent="scout",
+            subject="A",
+            predicate="X",
+            object="B",
+            source_id="s1",
+            confidence=0.9,
+            proposer_agent="scout",
         )
         await clean_pg.propose_triple(triple_low)
         await clean_pg.propose_triple(triple_high)
@@ -62,11 +76,16 @@ class TestProposeTriple:
 class TestCriticDecisions:
     async def test_approve_marks_decided(self, clean_pg) -> None:
         triple = Triple(
-            subject="A", predicate="X", object="B",
-            source_id="s1", confidence=0.7, proposer_agent="scout",
+            subject="A",
+            predicate="X",
+            object="B",
+            source_id="s1",
+            confidence=0.7,
+            proposer_agent="scout",
         )
         result = await clean_pg.propose_triple(triple)
         from uuid import UUID
+
         decided = await clean_pg.mark_triple_decided(
             UUID(result["triple_id"]), TripleStatus.APPROVED
         )
@@ -77,9 +96,14 @@ class TestCriticDecisions:
 
     async def test_reject_records_reason(self, clean_pg) -> None:
         from uuid import UUID
+
         triple = Triple(
-            subject="A", predicate="X", object="B",
-            source_id="s1", confidence=0.7, proposer_agent="scout",
+            subject="A",
+            predicate="X",
+            object="B",
+            source_id="s1",
+            confidence=0.7,
+            proposer_agent="scout",
         )
         result = await clean_pg.propose_triple(triple)
         await clean_pg.mark_triple_decided(
@@ -101,9 +125,14 @@ class TestCriticDecisions:
     async def test_decide_already_decided_returns_false(self, clean_pg) -> None:
         """Race protection: second decision attempt should be a no-op."""
         from uuid import UUID
+
         triple = Triple(
-            subject="A", predicate="X", object="B",
-            source_id="s1", confidence=0.7, proposer_agent="scout",
+            subject="A",
+            predicate="X",
+            object="B",
+            source_id="s1",
+            confidence=0.7,
+            proposer_agent="scout",
         )
         result = await clean_pg.propose_triple(triple)
         triple_id = UUID(result["triple_id"])
@@ -149,6 +178,7 @@ class TestPgVector:
         # Embedding dim must match the schema (1024 by default).
         # Use clearly-distinguishable vectors for deterministic ordering.
         from agentradar_core import settings
+
         dim = settings.embedding.dim
 
         await clean_pg.upsert_embedding(

@@ -16,9 +16,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from agentradar_supervisor.runtime import ScheduledJob, Supervisor
-
 
 # ---- ScheduledJob.is_due --------------------------------------------------
 
@@ -26,7 +24,8 @@ from agentradar_supervisor.runtime import ScheduledJob, Supervisor
 class TestScheduledJobIsDue:
     def test_zero_last_run_is_always_due(self):
         job = ScheduledJob(
-            name="x", interval_seconds=60,
+            name="x",
+            interval_seconds=60,
             factory=lambda: MagicMock(),
             last_run_at=0.0,
         )
@@ -35,7 +34,8 @@ class TestScheduledJobIsDue:
     def test_recent_last_run_is_not_due(self):
         now = time.monotonic()
         job = ScheduledJob(
-            name="x", interval_seconds=60,
+            name="x",
+            interval_seconds=60,
             factory=lambda: MagicMock(),
             last_run_at=now - 10,  # 10s ago, well within 60s interval
         )
@@ -44,7 +44,8 @@ class TestScheduledJobIsDue:
     def test_exactly_at_interval_boundary_is_due(self):
         now = time.monotonic()
         job = ScheduledJob(
-            name="x", interval_seconds=60,
+            name="x",
+            interval_seconds=60,
             factory=lambda: MagicMock(),
             last_run_at=now - 60,  # exactly 60s ago
         )
@@ -53,7 +54,8 @@ class TestScheduledJobIsDue:
     def test_long_past_run_is_due(self):
         now = time.monotonic()
         job = ScheduledJob(
-            name="x", interval_seconds=60,
+            name="x",
+            interval_seconds=60,
             factory=lambda: MagicMock(),
             last_run_at=now - 1000,
         )
@@ -69,11 +71,13 @@ class TestSupervisorStartupBehavior:
     def _make_supervisor(self, fire_on_startup: bool) -> Supervisor:
         jobs = [
             ScheduledJob(
-                name="a", interval_seconds=60,
+                name="a",
+                interval_seconds=60,
                 factory=lambda: MagicMock(),
             ),
             ScheduledJob(
-                name="b", interval_seconds=60,
+                name="b",
+                interval_seconds=60,
                 factory=lambda: MagicMock(),
             ),
         ]
@@ -134,7 +138,8 @@ class TestRunJob:
         agent = MagicMock()
         agent.run = AsyncMock(return_value={"x": 1})
         job = ScheduledJob(
-            name="test", interval_seconds=60,
+            name="test",
+            interval_seconds=60,
             factory=lambda: agent,
         )
         sup = Supervisor(jobs=[job], fire_on_startup=False)
@@ -151,7 +156,8 @@ class TestRunJob:
         agent = MagicMock()
         agent.run = AsyncMock(side_effect=RuntimeError("agent boom"))
         job = ScheduledJob(
-            name="test", interval_seconds=60,
+            name="test",
+            interval_seconds=60,
             factory=lambda: agent,
         )
         sup = Supervisor(jobs=[job], fire_on_startup=False)
@@ -175,7 +181,8 @@ class TestRunJob:
             return agent
 
         job = ScheduledJob(
-            name="test", interval_seconds=60,
+            name="test",
+            interval_seconds=60,
             factory=_factory,
         )
         sup = Supervisor(jobs=[job], fire_on_startup=False)

@@ -33,14 +33,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from fastmcp import Client
-
 from agentradar_core import get_logger
 from agentradar_store import (
     TavilyResult,
     get_slm_client,
     get_tavily_client,
 )
+from fastmcp import Client
 
 log = get_logger(__name__)
 
@@ -83,7 +82,7 @@ class TavilyArtifact:
     """One Tavily result enriched with our own identifiers and metadata."""
 
     result: TavilyResult
-    query: str          # which query produced this result
+    query: str  # which query produced this result
 
     @property
     def source_id(self) -> str:
@@ -133,10 +132,7 @@ class TavilyScout:
 
         # Step 2: in-memory dedup by URL (cross-run dedup via DB UNIQUE)
         seen: set[str] = set()
-        unique = [
-            a for a in artifacts
-            if not (a.result.url in seen or seen.add(a.result.url))
-        ]
+        unique = [a for a in artifacts if not (a.result.url in seen or seen.add(a.result.url))]
 
         # Step 3: store raw artifacts (the AI-cleaned snippet, NOT the page)
         await self._store_raw(mcp, unique)
@@ -150,7 +146,8 @@ class TavilyScout:
             if not concepts:
                 log.info(
                     "scout_tavily.result.no_concepts",
-                    source_id=art.source_id, url=art.result.url[:80],
+                    source_id=art.source_id,
+                    url=art.result.url[:80],
                 )
                 continue
             stats = await self._propose_findings(mcp, art, concepts)
@@ -179,22 +176,28 @@ class TavilyScout:
 
     async def _store_raw(self, mcp: Client, arts: list[TavilyArtifact]) -> None:
         for art in arts:
-            payload = json.dumps({
-                "source_type": "tavily",
-                "source_id": art.source_id,
-                "query": art.query,
-                "url": art.result.url,
-                "title": art.result.title,
-                "content": art.result.content,
-                "score": art.result.score,
-                "published_date": art.result.published_date,
-                "fetched_at": datetime.now(UTC).isoformat(),
-            }, indent=2)
-            await mcp.call_tool("put_text_artifact", {
-                "key": art.s3_key,
-                "content": payload,
-                "content_type": "application/json",
-            })
+            payload = json.dumps(
+                {
+                    "source_type": "tavily",
+                    "source_id": art.source_id,
+                    "query": art.query,
+                    "url": art.result.url,
+                    "title": art.result.title,
+                    "content": art.result.content,
+                    "score": art.result.score,
+                    "published_date": art.result.published_date,
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                },
+                indent=2,
+            )
+            await mcp.call_tool(
+                "put_text_artifact",
+                {
+                    "key": art.s3_key,
+                    "content": payload,
+                    "content_type": "application/json",
+                },
+            )
         log.info("scout_tavily.store_raw.done", count=len(arts))
 
     # ----- step 4 ----------------------------------------------------------
@@ -213,10 +216,7 @@ class TavilyScout:
             text = text.split("```", 2)[1].lstrip("json\n").rstrip("`").strip()
         try:
             parsed = json.loads(text)
-            return [
-                c for c in parsed.get("concepts", [])
-                if isinstance(c, str) and c.strip()
-            ]
+            return [c for c in parsed.get("concepts", []) if isinstance(c, str) and c.strip()]
         except json.JSONDecodeError:
             log.warning(
                 "scout_tavily.extract.bad_json",
@@ -237,24 +237,30 @@ class TavilyScout:
         mentions = 0
         proposals = 0
         for concept in concepts:
-            await mcp.call_tool("record_mention", {
-                "concept_name": concept,
-                "source_id": art.source_id,
-                "source_type": "blog",     # 'blog' is the closest existing type;
-                                           # 'web' could be added to SourceType later
-                "observed_at": observed_at,
-            })
+            await mcp.call_tool(
+                "record_mention",
+                {
+                    "concept_name": concept,
+                    "source_id": art.source_id,
+                    "source_type": "blog",  # 'blog' is the closest existing type;
+                    # 'web' could be added to SourceType later
+                    "observed_at": observed_at,
+                },
+            )
             mentions += 1
-            await mcp.call_tool("propose_triple", {
-                "proposer_agent": self.name,
-                "subject": concept,
-                "predicate": "MENTIONED_IN",
-                "object": art.source_id,
-                "source_id": art.source_id,
-                # Slightly higher confidence than arxiv MENTIONED_IN because
-                # Tavily's relevance score already filtered for relevance.
-                # The Critic still validates faithfulness.
-                "confidence": min(0.7, 0.4 + 0.3 * art.result.score),
-            })
+            await mcp.call_tool(
+                "propose_triple",
+                {
+                    "proposer_agent": self.name,
+                    "subject": concept,
+                    "predicate": "MENTIONED_IN",
+                    "object": art.source_id,
+                    "source_id": art.source_id,
+                    # Slightly higher confidence than arxiv MENTIONED_IN because
+                    # Tavily's relevance score already filtered for relevance.
+                    # The Critic still validates faithfulness.
+                    "confidence": min(0.7, 0.4 + 0.3 * art.result.score),
+                },
+            )
             proposals += 1
         return {"mentions": mentions, "proposals": proposals}

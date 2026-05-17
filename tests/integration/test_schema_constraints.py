@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 
 import asyncpg
 import pytest
-
 from agentradar_core import SourceType, Triple
 
 
@@ -26,8 +25,12 @@ class TestPostgresUniqueness:
         """The same triple content always produces the same proposal_hash;
         the UNIQUE constraint stops duplicate rows."""
         triple = Triple(
-            subject="X", predicate="MENTIONED_IN", object="src:1",
-            source_id="src:1", confidence=0.5, proposer_agent="test",
+            subject="X",
+            predicate="MENTIONED_IN",
+            object="src:1",
+            source_id="src:1",
+            confidence=0.5,
+            proposer_agent="test",
         )
 
         result = await clean_pg.propose_triple(triple)
@@ -49,8 +52,13 @@ class TestPostgresUniqueness:
                          source_id, confidence, status, proposal_hash)
                     VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
                     """,
-                    "different-proposer", "X", "MENTIONED_IN", "src:1",
-                    "src:1", 0.7, existing["proposal_hash"],
+                    "different-proposer",
+                    "X",
+                    "MENTIONED_IN",
+                    "src:1",
+                    "src:1",
+                    0.7,
+                    existing["proposal_hash"],
                 )
 
     @pytest.mark.asyncio
@@ -67,9 +75,9 @@ class TestPostgresUniqueness:
         pool = await clean_pg._ensure()
         async with pool.acquire() as conn:
             count = await conn.fetchval(
-                "SELECT COUNT(*) FROM mention_events "
-                "WHERE concept_name = $1 AND source_id = $2",
-                "MCP", "arxiv:2401.99999",
+                "SELECT COUNT(*) FROM mention_events " "WHERE concept_name = $1 AND source_id = $2",
+                "MCP",
+                "arxiv:2401.99999",
             )
         assert count == 1
 
@@ -100,12 +108,12 @@ class TestNeo4jUniqueness:
             constraints = [dict(r) async for r in result]
 
         concept_unique = [
-            c for c in constraints
-            if "Concept" in str(c) and "name" in str(c) and (
-                "UNIQUE" in str(c).upper() or "uniqueness" in str(c).lower()
-            )
+            c
+            for c in constraints
+            if "Concept" in str(c)
+            and "name" in str(c)
+            and ("UNIQUE" in str(c).upper() or "uniqueness" in str(c).lower())
         ]
         assert len(concept_unique) >= 1, (
-            f"No UNIQUE constraint on Concept.name found. "
-            f"Constraints visible: {constraints}"
+            f"No UNIQUE constraint on Concept.name found. " f"Constraints visible: {constraints}"
         )

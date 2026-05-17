@@ -8,15 +8,12 @@ verifies the ForecastTask discriminator covers all three task kinds.
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from agentradar_supervisor.state import (
-    CandidateForecast,
     DigestSynthesis,
     ForecastState,
     ForecastTask,
 )
-
+from pydantic import ValidationError
 
 # ---- DigestSynthesis validation -----------------------------------------
 

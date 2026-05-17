@@ -8,16 +8,14 @@ HTTP is mocked at the httpx layer.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
-
 from agentradar_supervisor.agents.trend_sources.base import TrendItem
 from agentradar_supervisor.agents.trend_sources.github import GithubTrendSource
 from agentradar_supervisor.agents.trend_sources.hn import HnTrendSource
 from agentradar_supervisor.agents.trend_sources.lab_rss import LabRssTrendSource
-
 
 # ---- TrendItem common shape ----------------------------------------------
 
@@ -25,27 +23,39 @@ from agentradar_supervisor.agents.trend_sources.lab_rss import LabRssTrendSource
 class TestTrendItemShape:
     def test_source_id_includes_kind_prefix(self):
         item = TrendItem(
-            source_kind="github", url="https://github.com/foo/bar",
-            title="foo / bar", summary="x", published_at=datetime.now(UTC),
+            source_kind="github",
+            url="https://github.com/foo/bar",
+            title="foo / bar",
+            summary="x",
+            published_at=datetime.now(UTC),
         )
         assert item.source_id.startswith("trend-github:")
 
     def test_source_id_stable_for_same_url(self):
         a = TrendItem(
-            source_kind="hn", url="https://example.com",
-            title="x", summary="y", published_at=datetime.now(UTC),
+            source_kind="hn",
+            url="https://example.com",
+            title="x",
+            summary="y",
+            published_at=datetime.now(UTC),
         )
         b = TrendItem(
-            source_kind="hn", url="https://example.com",
-            title="different", summary="different", published_at=datetime.now(UTC),
+            source_kind="hn",
+            url="https://example.com",
+            title="different",
+            summary="different",
+            published_at=datetime.now(UTC),
         )
         # source_id only depends on URL, not on title/summary
         assert a.source_id == b.source_id
 
     def test_s3_key_groups_by_source_kind(self):
         item = TrendItem(
-            source_kind="lab_rss", url="https://x.com",
-            title="x", summary="y", published_at=datetime.now(UTC),
+            source_kind="lab_rss",
+            url="https://x.com",
+            title="x",
+            summary="y",
+            published_at=datetime.now(UTC),
         )
         assert item.s3_key.startswith("trends/lab_rss/")
 
@@ -78,11 +88,14 @@ GITHUB_API_RESPONSE = {
 class TestGithubTrendSource:
     @pytest.fixture
     def github_config(self, tmp_yaml):
-        return tmp_yaml("trend_github.yaml", {
-            "topics": ["llm-agent", "ai-agents"],
-            "since": "weekly",
-            "max_per_topic": 5,
-        })
+        return tmp_yaml(
+            "trend_github.yaml",
+            {
+                "topics": ["llm-agent", "ai-agents"],
+                "since": "weekly",
+                "max_per_topic": 5,
+            },
+        )
 
     @pytest.mark.asyncio
     async def test_empty_topics_returns_empty(self, tmp_yaml):
@@ -113,9 +126,12 @@ class TestGithubTrendSource:
 
     @pytest.mark.asyncio
     async def test_rate_limit_returns_empty_for_topic(
-        self, github_config, monkeypatch,
+        self,
+        github_config,
+        monkeypatch,
     ):
         """A 403 response (rate-limited) should not crash the run."""
+
         async def _rate_limited(self, url, **kwargs):
             response = MagicMock()
             response.status_code = 403
@@ -172,7 +188,7 @@ HN_API_RESPONSE = {
         },
         {
             "objectID": "67890",
-            "url": None,    # Some HN posts have no URL (Ask HN, etc.)
+            "url": None,  # Some HN posts have no URL (Ask HN, etc.)
             "title": "Ask HN: How are you using LLM agents in production?",
             "story_text": "Curious about real-world deployments...",
             "points": 80,
@@ -187,17 +203,21 @@ HN_API_RESPONSE = {
 class TestHnTrendSource:
     @pytest.fixture
     def hn_config(self, tmp_yaml):
-        return tmp_yaml("trend_hn.yaml", {
-            "keywords": ["AI agent", "LLM agent"],
-            "min_points": 30,
-            "window_hours": 168,
-            "max_results": 15,
-        })
+        return tmp_yaml(
+            "trend_hn.yaml",
+            {
+                "keywords": ["AI agent", "LLM agent"],
+                "min_points": 30,
+                "window_hours": 168,
+                "max_results": 15,
+            },
+        )
 
     @pytest.mark.asyncio
     async def test_empty_keywords_returns_empty(self, tmp_yaml):
-        path = tmp_yaml("empty.yaml", {"keywords": [], "min_points": 30,
-                                        "window_hours": 168, "max_results": 15})
+        path = tmp_yaml(
+            "empty.yaml", {"keywords": [], "min_points": 30, "window_hours": 168, "max_results": 15}
+        )
         src = HnTrendSource(config_path=path)
         assert await src.fetch() == []
 
@@ -208,6 +228,7 @@ class TestHnTrendSource:
             response.json = MagicMock(return_value=HN_API_RESPONSE)
             response.raise_for_status = MagicMock()
             return response
+
         monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
         src = HnTrendSource(config_path=hn_config)
@@ -221,11 +242,13 @@ class TestHnTrendSource:
         response_only_no_url = {
             "hits": [HN_API_RESPONSE["hits"][1]]  # the no-URL one
         }
+
         async def _fake_get(self, url, **kwargs):
             response = MagicMock()
             response.json = MagicMock(return_value=response_only_no_url)
             response.raise_for_status = MagicMock()
             return response
+
         monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
         src = HnTrendSource(config_path=hn_config)
@@ -240,6 +263,7 @@ class TestHnTrendSource:
             response.json = MagicMock(return_value=HN_API_RESPONSE)
             response.raise_for_status = MagicMock()
             return response
+
         monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
         src = HnTrendSource(config_path=hn_config)
@@ -253,6 +277,7 @@ class TestHnTrendSource:
     async def test_fetch_failure_returns_empty(self, hn_config, monkeypatch):
         async def _fail(self, url, **kwargs):
             raise httpx.RequestError("network down")
+
         monkeypatch.setattr(httpx.AsyncClient, "get", _fail)
 
         src = HnTrendSource(config_path=hn_config)
@@ -287,29 +312,33 @@ SAMPLE_RSS = """<?xml version="1.0" encoding="UTF-8"?>
 class TestLabRssTrendSource:
     @pytest.fixture
     def labs_config(self, tmp_yaml):
-        return tmp_yaml("trend_labs.yaml", {
-            "feeds": [
-                {"name": "Test Lab", "url": "https://lab.example.com/rss.xml"},
-            ],
-            "max_per_feed": 5,
-            "window_days": 30,
-        })
+        return tmp_yaml(
+            "trend_labs.yaml",
+            {
+                "feeds": [
+                    {"name": "Test Lab", "url": "https://lab.example.com/rss.xml"},
+                ],
+                "max_per_feed": 5,
+                "window_days": 30,
+            },
+        )
 
     @pytest.mark.asyncio
     async def test_empty_feeds_returns_empty(self, tmp_yaml):
-        path = tmp_yaml("empty.yaml", {"feeds": [], "max_per_feed": 5,
-                                        "window_days": 30})
+        path = tmp_yaml("empty.yaml", {"feeds": [], "max_per_feed": 5, "window_days": 30})
         src = LabRssTrendSource(config_path=path)
         assert await src.fetch() == []
 
     @pytest.mark.asyncio
     async def test_filters_by_window_days(self, labs_config, monkeypatch):
         """Old entries (outside window_days) should be filtered out."""
+
         async def _fake_get(self, url, **kwargs):
             response = MagicMock()
             response.text = SAMPLE_RSS
             response.raise_for_status = MagicMock()
             return response
+
         monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
         # Mock "now" via patching is tricky; instead trust the logic:
@@ -324,14 +353,17 @@ class TestLabRssTrendSource:
 
     @pytest.mark.asyncio
     async def test_per_feed_failure_isolated(self, tmp_yaml, monkeypatch):
-        path = tmp_yaml("two_feeds.yaml", {
-            "feeds": [
-                {"name": "Bad", "url": "https://bad.example.com/rss"},
-                {"name": "Good", "url": "https://good.example.com/rss"},
-            ],
-            "max_per_feed": 5,
-            "window_days": 365 * 10,  # huge window so age doesn't filter
-        })
+        path = tmp_yaml(
+            "two_feeds.yaml",
+            {
+                "feeds": [
+                    {"name": "Bad", "url": "https://bad.example.com/rss"},
+                    {"name": "Good", "url": "https://good.example.com/rss"},
+                ],
+                "max_per_feed": 5,
+                "window_days": 365 * 10,  # huge window so age doesn't filter
+            },
+        )
         call_count = [0]
 
         async def _maybe_fail(self, url, **kwargs):
@@ -342,6 +374,7 @@ class TestLabRssTrendSource:
             response.text = SAMPLE_RSS
             response.raise_for_status = MagicMock()
             return response
+
         monkeypatch.setattr(httpx.AsyncClient, "get", _maybe_fail)
 
         src = LabRssTrendSource(config_path=path)

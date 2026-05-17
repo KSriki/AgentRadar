@@ -14,13 +14,11 @@ Design contract:
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from typing import Any
 from uuid import UUID
-import json
-
-from fastmcp import FastMCP
 
 from agentradar_core import (
     SourceType,
@@ -34,12 +32,14 @@ from agentradar_store import (
     get_pg_client,
     get_s3_client,
 )
+from fastmcp import FastMCP
 
 log = get_logger(__name__)
 
 mcp = FastMCP("agentradar")
 
 # HELPER
+
 
 def _serialize_neo4j(value: Any) -> Any:
     """
@@ -56,6 +56,7 @@ def _serialize_neo4j(value: Any) -> Any:
         return [_serialize_neo4j(v) for v in value]
     return value
 
+
 # Cypher-identifier validation (defense in depth; Critic also validates)
 _CYPHER_IDENT = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
@@ -63,6 +64,7 @@ _CYPHER_IDENT = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 # ---------------------------------------------------------------------------
 # Concept lookup / search
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 async def search_concepts(query: str, limit: int = 10) -> list[dict[str, Any]]:
@@ -116,6 +118,7 @@ async def get_concept(name: str) -> dict[str, Any]:
 # Triple proposal — writes to pending queue, NEVER directly to graph
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
 async def propose_triple(
     proposer_agent: str,
@@ -143,9 +146,7 @@ async def propose_triple(
         idempotent and may update the stored confidence upward.
     """
     if not _CYPHER_IDENT.match(predicate):
-        raise ValueError(
-            f"Invalid predicate {predicate!r}: must match [A-Z][A-Z0-9_]{{0,63}}"
-        )
+        raise ValueError(f"Invalid predicate {predicate!r}: must match [A-Z][A-Z0-9_]{{0,63}}")
     triple = Triple(
         subject=subject,
         predicate=predicate,
@@ -161,6 +162,7 @@ async def propose_triple(
 # ---------------------------------------------------------------------------
 # Critic-gated approval / rejection — the ONLY paths to Neo4j writes
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 async def list_pending_triples(limit: int = 50) -> list[dict[str, Any]]:
@@ -251,6 +253,7 @@ async def reject_triple(triple_id: str, reason: str) -> dict[str, Any]:
 # Mention tracking — Scouts write, Forecaster reads
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
 async def record_mention(
     concept_name: str,
@@ -279,9 +282,7 @@ async def record_mention(
 
 
 @mcp.tool
-async def get_mention_velocity(
-    concept_name: str, window_days: int = 90
-) -> dict[str, Any]:
+async def get_mention_velocity(concept_name: str, window_days: int = 90) -> dict[str, Any]:
     """
     Weekly mention buckets and a slope (mentions/week trend) for a concept.
     Used by the Forecaster to detect rising-velocity concepts.
@@ -298,10 +299,9 @@ async def get_mention_velocity(
 # Graph traversal — Forecaster's primary read tool
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
-async def traverse(
-    start: str, edge_types: list[str], depth: int = 2
-) -> dict[str, Any]:
+async def traverse(start: str, edge_types: list[str], depth: int = 2) -> dict[str, Any]:
     """
     Multi-hop graph traversal from a starting Concept along the given edge types.
 
@@ -361,6 +361,7 @@ async def traverse(
 # Artifact storage — Scouts write raw text content
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
 async def put_text_artifact(
     key: str, content: str, content_type: str = "text/plain"
@@ -373,15 +374,14 @@ async def put_text_artifact(
     base64-roundtripping large blobs through MCP tool args is wasteful.
     """
     s3 = get_s3_client()
-    uri = await s3.put_artifact(
-        key, content.encode("utf-8"), content_type=content_type
-    )
+    uri = await s3.put_artifact(key, content.encode("utf-8"), content_type=content_type)
     return {"uri": uri}
 
 
 # ---------------------------------------------------------------------------
 # Healthcheck
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 async def healthcheck() -> dict[str, bool]:
@@ -400,15 +400,16 @@ async def healthcheck() -> dict[str, bool]:
 # Forecasting Agent
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
 async def propose_forecast(
     concept_name: str,
-    claim: str,                      # was 'prediction' in my earlier code
+    claim: str,  # was 'prediction' in my earlier code
     confidence: float,
     confidence_band: str,
-    horizon_months: int = 6,         # NEW — required by existing schema
+    horizon_months: int = 6,  # NEW — required by existing schema
     reasoning: str = "",
-    cited_source_ids: list[str] | None = None,    # was 'cited_concept_ids'
+    cited_source_ids: list[str] | None = None,  # was 'cited_concept_ids'
     evidence_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
@@ -434,9 +435,7 @@ async def propose_forecast(
     if not (0.0 <= confidence <= 1.0):
         raise ValueError(f"confidence must be in [0,1], got {confidence}")
     if confidence_band not in ("weak", "medium", "high"):
-        raise ValueError(
-            f"confidence_band must be weak|medium|high, got {confidence_band!r}"
-        )
+        raise ValueError(f"confidence_band must be weak|medium|high, got {confidence_band!r}")
     if not (1 <= horizon_months <= 24):
         raise ValueError(f"horizon_months must be in [1,24], got {horizon_months}")
 
@@ -502,6 +501,7 @@ async def list_recent_forecasts(limit: int = 10) -> dict[str, Any]:
     ]
     return {"forecasts": forecasts, "count": len(forecasts)}
 
+
 @mcp.tool
 async def select_forecast_candidate(
     velocity_window_days: int = 90,
@@ -548,7 +548,8 @@ async def select_forecast_candidate(
             ORDER BY n DESC
             LIMIT 1
             """,
-            velocity_window_days, cooldown_days,
+            velocity_window_days,
+            cooldown_days,
         )
     return {"concept_name": row["concept_name"] if row else None}
 
@@ -575,15 +576,14 @@ async def get_forecast_evidence(
     if not concept_name.strip():
         raise ValueError("concept_name required")
     if not (1 <= velocity_window_days <= 365):
-        raise ValueError(
-            f"velocity_window_days must be in [1,365], got {velocity_window_days}"
-        )
+        raise ValueError(f"velocity_window_days must be in [1,365], got {velocity_window_days}")
 
     pg = get_pg_client()
 
     # Mention velocity (existing method, time-bucketed)
     velocity = await pg.mention_velocity(
-        concept_name, window_days=velocity_window_days,
+        concept_name,
+        window_days=velocity_window_days,
     )
 
     # Mentions broken down by source type
@@ -610,6 +610,7 @@ async def get_forecast_evidence(
         "mention_velocity": velocity,
     }
 
+
 @mcp.tool
 async def select_top_n_concepts(
     top_n: int = 5,
@@ -627,9 +628,9 @@ async def select_top_n_concepts(
     if not (1 <= top_n <= 20):
         raise ValueError(f"top_n must be in [1,20], got {top_n}")
     if not (1 <= velocity_window_days <= 365):
-        raise ValueError(f"velocity_window_days must be in [1,365]")
+        raise ValueError("velocity_window_days must be in [1,365]")
     if not (0 <= cooldown_days <= 90):
-        raise ValueError(f"cooldown_days must be in [0,90]")
+        raise ValueError("cooldown_days must be in [0,90]")
 
     pg = get_pg_client()
     pool = await pg._ensure()
@@ -653,7 +654,9 @@ async def select_top_n_concepts(
             ORDER BY n DESC
             LIMIT $3
             """,
-            velocity_window_days, cooldown_days, top_n,
+            velocity_window_days,
+            cooldown_days,
+            top_n,
         )
     return {"concept_names": [r["concept_name"] for r in rows]}
 
@@ -675,13 +678,9 @@ async def propose_digest(
     superseded.
     """
     if not (0.0 <= average_confidence <= 1.0):
-        raise ValueError(
-            f"average_confidence must be in [0,1], got {average_confidence}"
-        )
+        raise ValueError(f"average_confidence must be in [0,1], got {average_confidence}")
     if confidence_band not in ("weak", "medium", "high"):
-        raise ValueError(
-            f"confidence_band must be weak|medium|high, got {confidence_band!r}"
-        )
+        raise ValueError(f"confidence_band must be weak|medium|high, got {confidence_band!r}")
 
     pg = get_pg_client()
     pool = await pg._ensure()
@@ -694,8 +693,12 @@ async def propose_digest(
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             RETURNING id
             """,
-            label, themes, standout, json.dumps(forecasts),
-            average_confidence, confidence_band,
+            label,
+            themes,
+            standout,
+            json.dumps(forecasts),
+            average_confidence,
+            confidence_band,
         )
     return {"digest_id": str(row["id"]), "status": "stored"}
 

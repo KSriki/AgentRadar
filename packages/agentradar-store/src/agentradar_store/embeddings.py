@@ -13,7 +13,6 @@ import json
 from typing import Protocol
 
 import aioboto3
-
 from agentradar_core import EmbeddingSettings, get_logger, settings
 
 log = get_logger(__name__)
@@ -37,16 +36,13 @@ class BedrockTitanEmbeddings:
                 modelId=self._cfg.model_id,
                 contentType="application/json",
                 accept="application/json",
-                body=json.dumps(
-                    {"inputText": text, "dimensions": self._cfg.dim}
-                ),
+                body=json.dumps({"inputText": text, "dimensions": self._cfg.dim}),
             )
             payload = json.loads(await resp["body"].read())
         embedding: list[float] = payload["embedding"]
         if len(embedding) != self._cfg.dim:
             raise ValueError(
-                f"Embedding dim mismatch: got {len(embedding)}, "
-                f"expected {self._cfg.dim}"
+                f"Embedding dim mismatch: got {len(embedding)}, " f"expected {self._cfg.dim}"
             )
         return embedding
 
@@ -68,9 +64,7 @@ def get_embedding_client() -> EmbeddingClient:
     global _singleton
     if _singleton is None:
         if settings.embedding.provider == "bedrock":
-            _singleton = BedrockTitanEmbeddings(
-                settings.embedding, settings.bedrock.aws_region
-            )
+            _singleton = BedrockTitanEmbeddings(settings.embedding, settings.bedrock.aws_region)
         else:
             raise NotImplementedError(
                 f"Embedding provider '{settings.embedding.provider}' not yet supported"

@@ -14,16 +14,13 @@ Tests cover:
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-
 from agentradar_supervisor.config_loader import (
     _load_static_queries,
     load_tavily_queries,
 )
-
 
 # ---- _load_static_queries (the YAML-specific layer) ----------------------
 
@@ -87,9 +84,12 @@ class TestLoadStaticQueries:
             _load_static_queries()
 
     def test_whitespace_entries_filtered(self, tmp_yaml, monkeypatch):
-        path = tmp_yaml("mixed.yaml", {
-            "queries": ["good", "  ", "", "also good", "   "],
-        })
+        path = tmp_yaml(
+            "mixed.yaml",
+            {
+                "queries": ["good", "  ", "", "also good", "   "],
+            },
+        )
         monkeypatch.setattr(
             "agentradar_supervisor.config_loader.settings.scout.tavily_queries_path",
             path,
@@ -108,9 +108,12 @@ class TestLoadStaticQueries:
             _load_static_queries()
 
     def test_strips_surrounding_whitespace(self, tmp_yaml, monkeypatch):
-        path = tmp_yaml("strippable.yaml", {
-            "queries": ["  q1  ", "\tq2\n", "q3"],
-        })
+        path = tmp_yaml(
+            "strippable.yaml",
+            {
+                "queries": ["  q1  ", "\tq2\n", "q3"],
+            },
+        )
         monkeypatch.setattr(
             "agentradar_supervisor.config_loader.settings.scout.tavily_queries_path",
             path,
@@ -163,7 +166,9 @@ class TestLoadTavilyQueries:
 
     @pytest.mark.asyncio
     async def test_include_derived_false_returns_static_only(
-        self, tmp_yaml, monkeypatch,
+        self,
+        tmp_yaml,
+        monkeypatch,
     ):
         path = tmp_yaml("base.yaml", {"queries": ["a", "b"]})
         monkeypatch.setattr(

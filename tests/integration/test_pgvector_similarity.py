@@ -91,9 +91,9 @@ class TestPgVectorSimilarity:
                 """
             )
         index_defs = "\n".join(r["indexdef"] for r in rows)
-        assert "hnsw" in index_defs.lower(), (
-            f"Expected HNSW index on concept_embeddings, got: {index_defs}"
-        )
-        assert "ivfflat" not in index_defs.lower(), (
-            f"Found ivfflat index — should be HNSW only: {index_defs}"
-        )
+        assert (
+            "hnsw" in index_defs.lower()
+        ), f"Expected HNSW index on concept_embeddings, got: {index_defs}"
+        assert (
+            "ivfflat" not in index_defs.lower()
+        ), f"Found ivfflat index — should be HNSW only: {index_defs}"
