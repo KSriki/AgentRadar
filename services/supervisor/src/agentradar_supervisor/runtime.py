@@ -37,7 +37,7 @@ from agentradar_core import (
 )
 
 from agentradar_supervisor.agents import (
-    Agent, ArxivScout, Critic, TavilyScout, TrendScout,
+    Agent, ArxivScout, Critic, Forecaster, TavilyScout, TrendScout,
 )
 from agentradar_supervisor.agents.trend_sources import (
     GithubTrendSource, HnTrendSource, LabRssTrendSource,
@@ -112,29 +112,41 @@ class Supervisor:
             mcp_url=MCP_URL,
         )
 
-        async with self._mcp_session() as mcp:
-            while not self._shutdown.is_set():
-                await self._tick(mcp)
-                # Wait for next tick OR shutdown — whichever first.
-                # Cleanest way to make Ctrl-C snappy.
-                try:
-                    await asyncio.wait_for(
-                        self._shutdown.wait(), timeout=TICK_SECONDS
-                    )
-                except asyncio.TimeoutError:
-                    pass
+       
+        log.info(
+            "supervisor.loop_started",
+            jobs=[
+                {"name": j.name, "interval_s": j.interval_seconds}
+                for j in self._jobs
+            ],
+            fire_on_startup=self._fire_on_startup,
+            mcp_url=MCP_URL,
+        )
+        while not self._shutdown.is_set():
+            await self._tick()                        # ← no shared mcp
+            try:
+                await asyncio.wait_for(
+                    self._shutdown.wait(), timeout=TICK_SECONDS
+                )
+            except asyncio.TimeoutError:
+                pass
 
         log.info("supervisor.loop_exited")
 
-    async def _tick(self, mcp: Client) -> None:
-        """Check every job; run the ones that are due."""
+    async def _tick(self) -> None:
+        """Check every job; run the ones that are due with a fresh MCP session."""
         now = time.monotonic()
         for job in self._jobs:
             if not job.is_due(now):
                 continue
-            await self._run_job(job, mcp)
-            # Mark completion AFTER the run finishes (not before) so a slow
-            # job can't overlap with itself on the next tick.
+            try:
+                async with self._mcp_session() as mcp:
+                    await self._run_job(job, mcp)
+            except Exception as exc:
+                log.error(
+                    "supervisor.tick_session_failure",
+                    job=job.name, error=str(exc),
+                )
             job.last_run_at = time.monotonic()
 
     async def _run_job(self, job: ScheduledJob, mcp: Client) -> None:
@@ -179,40 +191,36 @@ class Supervisor:
     @asynccontextmanager
     async def _mcp_session(self) -> AsyncIterator[Client]:
         """
-        One persistent MCP client for the whole supervisor lifetime.
-        Retries connection on startup since the api container may not be
-        ready yet even after its healthcheck flips green (TCP ready != MCP ready).
+        Per-run MCP session. Each job gets a fresh session; session death
+        affects only the current job, not the supervisor lifetime.
+
+        Retries on initial connect with exponential backoff to handle
+        the api-not-ready-yet startup case.
         """
         attempts = 0
-        max_attempts = 30
-        backoff = 2.0
+        max_attempts = 5
+        backoff = 1.0
 
         while True:
             try:
                 async with Client(MCP_URL) as client:
-                    # Sanity-check the connection by listing tools.
-                    # If list_tools() works, every other tool call should too.
-                    await client.list_tools()
-                    log.info("supervisor.mcp_connected", url=MCP_URL)
+                    await client.list_tools()  # sanity check
                     yield client
                     return
             except Exception as exc:
                 attempts += 1
                 if attempts >= max_attempts:
                     log.error(
-                        "supervisor.mcp_connect_failed_giving_up",
-                        url=MCP_URL,
-                        attempts=attempts,
-                        error=str(exc),
+                        "supervisor.mcp_session_failed",
+                        url=MCP_URL, attempts=attempts, error=str(exc),
                     )
                     raise
                 log.warning(
-                    "supervisor.mcp_connect_retry",
-                    url=MCP_URL,
-                    attempt=attempts,
-                    error=str(exc),
+                    "supervisor.mcp_session_retry",
+                    url=MCP_URL, attempt=attempts, error=str(exc),
                 )
                 await asyncio.sleep(backoff)
+                backoff *= 2  # exponential
 
 
 def build_supervisor() -> Supervisor:
@@ -251,6 +259,11 @@ def build_supervisor() -> Supervisor:
             max_results=cfg.scout_tavily_max_results,
         )
     
+    def make_forecaster() -> Agent:
+        # Pass concept_name=None so the Forecaster auto-selects the
+        # highest-velocity-not-recently-forecasted concept each run.
+        return Forecaster(concept_name=None)
+    
     trend_source_factories = [
         lambda: GithubTrendSource(),
         lambda: HnTrendSource(),
@@ -278,7 +291,7 @@ def build_supervisor() -> Supervisor:
             interval_seconds=cfg.scout_tavily_interval,
             factory=make_tavily_scout,
         ),
-        ScheduledJob(                               # <-- new
+        ScheduledJob(
             name="scout-trends",
             interval_seconds=cfg.scout_trends_interval,
             factory=make_trend_scout,
@@ -287,6 +300,11 @@ def build_supervisor() -> Supervisor:
             name="critic",
             interval_seconds=cfg.critic_interval,
             factory=make_critic,
+        ),
+        ScheduledJob(
+            name="forecaster",
+            interval_seconds=cfg.forecaster_interval,
+            factory=make_forecaster,
         ),
     ]
     return Supervisor(jobs=jobs, fire_on_startup=cfg.fire_on_startup)

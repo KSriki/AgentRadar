@@ -48,6 +48,10 @@ class ScheduleSettings(BaseSettings):
     # gives the dashboard frequent activity.
     scout_trends_interval: int = Field(default=6 * 60 * 60)
 
+    # Forecaster: daily by default. Override via SCHEDULE_FORECASTER_INTERVAL
+    # (e.g., 1800 for 30 min) for demos.
+    forecaster_interval: int = Field(default=24 * 60 * 60)
+
 
 def load_schedule() -> ScheduleSettings:
     """Read the schedule from env. Cached implicitly via pydantic."""

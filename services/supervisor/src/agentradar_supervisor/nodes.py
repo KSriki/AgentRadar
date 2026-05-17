@@ -22,7 +22,7 @@ import json
 from typing import Any
 
 from agentradar_core import get_logger
-from agentradar_store import get_pg_client, get_slm_client
+from agentradar_store import get_slm_client
 from agentradar_supervisor.state import (
     CandidateForecast,
     ForecastState,
@@ -116,33 +116,24 @@ async def execute(state: ForecastState) -> dict[str, Any]:
     log.info("roma.execute.start", concept=concept_name, depth=state.get("depth", 0))
 
     # ---- Step 1: gather evidence -------------------------------------------
-    pg = get_pg_client()
-    velocity = await pg.mention_velocity(concept_name, window_days=90)
+    mcp = state.get("mcp")
+    if mcp is None:
+        log.error("roma.execute.no_mcp_in_state")
+        return {"evidence": {}, "candidate_forecast": {}}
 
-    # Mention count by source type (rough source-diversity signal)
-    pool = await pg._ensure()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT source_type::text AS st, COUNT(*)::int AS n
-            FROM mention_events
-            WHERE concept_name = $1
-            GROUP BY source_type
-            """,
-            concept_name,
-        )
-    mentions_by_source = {r["st"]: r["n"] for r in rows}
-    total_mentions = sum(mentions_by_source.values())
-    source_diversity = len(mentions_by_source)
+    try:
+        result = await mcp.call_tool("get_forecast_evidence", {
+            "concept_name": concept_name,
+            "velocity_window_days": 90,
+        })
+        evidence = result.data
+    except Exception as exc:
+        log.exception("roma.execute.evidence_failed", error=str(exc))
+        return {"evidence": {}, "candidate_forecast": {}}
 
-    evidence = {
-        "concept_name": concept_name,
-        "total_mentions": total_mentions,
-        "source_diversity": source_diversity,
-        "mentions_by_source": mentions_by_source,
-        "mention_velocity": velocity,
-    }
-    log.info("roma.execute.evidence_gathered", **evidence)
+    log.info("roma.execute.evidence_gathered", **{
+        k: v for k, v in evidence.items() if k != "mention_velocity"
+    })
 
     # ---- Step 2: SLM call with structured output ---------------------------
     slm = get_slm_client()
@@ -150,14 +141,14 @@ async def execute(state: ForecastState) -> dict[str, Any]:
 
     system_prompt = (
         "You are a forecaster specialized in agentic-AI ecosystem dynamics. "
-        "Given evidence about a tracked concept, produce a forward-looking "
-        "prediction for its trajectory over 3, 6, and 12 month horizons. "
-        "Be concrete: 'will X' or 'will not X' or 'partially Y.' Avoid hedging. "
-        "Rate your confidence honestly — low confidence is fine when evidence "
-        "is thin.\n\n"
-        "Respond ONLY with valid JSON in this exact shape, no prose, no fences:\n"
-        '{"prediction": "...", "confidence": 0.0-1.0, "horizon_months": 3|6|12, '
-        '"reasoning": "...", "cited_concept_ids": [...]}'
+        "Given evidence about a tracked concept, produce a SINGLE forward-looking "
+        "prediction. Be concrete: 'will X' or 'will not X' or 'partially Y'. "
+        "Avoid hedging. Rate your confidence honestly — low confidence is fine "
+        "when evidence is thin.\n\n"
+        "The prediction field is ONE STRING (one prediction). "
+        "The horizon_months field is ONE INTEGER from 1 to 24 — choose the "
+        "horizon (3, 6, or 12 months are common) that best fits the available "
+        "signal. Sparse evidence warrants longer horizons."
     )
 
     user_prompt = (
@@ -166,9 +157,40 @@ async def execute(state: ForecastState) -> dict[str, Any]:
         f"Forecast this concept's trajectory."
     )
 
+    forecast_schema = {
+        "type": "object",
+        "properties": {
+            "prediction": {
+                "type": "string",
+                "description": "Single-paragraph trajectory prediction.",
+            },
+            "confidence": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+            },
+            "horizon_months": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 24,
+            },
+            "reasoning": {
+                "type": "string",
+            },
+            "cited_concept_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["prediction", "confidence", "horizon_months", "reasoning"],
+    }
+
     raw = await slm.generate(
-        system=system_prompt, user=user_prompt,
-        max_tokens=600, temperature=0.2,
+        system=system_prompt,
+        user=user_prompt,
+        max_tokens=600,
+        temperature=0.2,
+        response_format=forecast_schema,
     )
 
     # Defensive: strip markdown fences smaller models often emit

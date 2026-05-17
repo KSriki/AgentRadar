@@ -21,7 +21,7 @@ from typing import Any
 from fastmcp import Client
 
 from agentradar_core import get_logger
-from agentradar_store import get_pg_client
+
 from agentradar_supervisor.graph import get_roma_graph
 from agentradar_supervisor.state import ForecastState, ForecastTask
 
@@ -46,7 +46,8 @@ class Forecaster:
         log.info("forecaster.run.start", forced_concept=self._forced_concept)
 
         # ---- Step 1: pick a concept to forecast ----
-        concept = self._forced_concept or await self._select_candidate()
+        # Step 1: pick a concept to forecast
+        concept = self._forced_concept or await self._select_candidate(mcp)
         if concept is None:
             log.info("forecaster.run.no_candidates")
             return {"forecasts_produced": 0}
@@ -62,6 +63,7 @@ class Forecaster:
             "trace_id": f"forecast-{concept}-{int(time.time())}",
             "parent_context": {},
             "subtask_results": [],
+            "mcp": mcp,
         }
 
         # ---- Step 3: invoke ROMA ----
@@ -94,34 +96,15 @@ class Forecaster:
             "confidence": forecast["confidence"],
         }
 
-    async def _select_candidate(self) -> str | None:
+    async def _select_candidate(self, mcp: Client) -> str | None:
         """
-        Select the next concept to forecast.
+        Select the next concept to forecast via MCP.
 
-        Heuristic for Session 1: highest mention velocity in the last 90 days
-        among concepts that don't have a recent (last 14 days) forecast.
+        Heuristic: highest mention velocity in the last 90 days among
+        concepts that haven't been forecasted in the last 14 days.
         """
-        pg = get_pg_client()
-        pool = await pg._ensure()
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                WITH recent_forecasts AS (
-                    SELECT DISTINCT concept_name
-                    FROM forecasts
-                    WHERE generated_at > NOW() - INTERVAL '14 days'
-                ),
-                concept_volume AS (
-                    SELECT concept_name, COUNT(*)::int AS n
-                    FROM mention_events
-                    WHERE observed_at > NOW() - INTERVAL '90 days'
-                    GROUP BY concept_name
-                )
-                SELECT concept_name
-                FROM concept_volume
-                WHERE concept_name NOT IN (SELECT concept_name FROM recent_forecasts)
-                ORDER BY n DESC
-                LIMIT 1
-                """,
-            )
-        return row["concept_name"] if row else None
+        result = await mcp.call_tool("select_forecast_candidate", {
+            "velocity_window_days": 90,
+            "cooldown_days": 14,
+        })
+        return result.data.get("concept_name")

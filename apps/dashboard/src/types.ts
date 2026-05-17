@@ -43,3 +43,31 @@ export type TopConcept = {
   velocity: number;
   buckets: { week: string; mentions: number }[];
 };
+
+
+
+
+export type Forecast = {
+  id: string;
+  concept_name: string;
+  claim: string;
+  confidence: number;
+  confidence_band: "weak" | "medium" | "high";
+  horizon_months: number;
+  reasoning: string;
+  cited_source_ids: string[];
+  predicted_at: string;
+  outcome: "hit" | "miss" | "partial" | null;
+  graded_at: string | null;
+};
+
+export type SourceBreakdownEntry = {
+  source_type: string;
+  mentions: number;
+  percentage: number;
+};
+
+export type SourceBreakdown = {
+  total_mentions: number;
+  by_source_type: SourceBreakdownEntry[];
+};

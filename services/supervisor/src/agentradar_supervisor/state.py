@@ -62,6 +62,8 @@ class ForecastState(TypedDict, total=False):
     final_forecast: dict[str, Any]        # the persisted forecast object
     confidence_band: Literal["weak", "medium", "high"]
 
+    mcp: Any
+
 
 # ---- Output Pydantic models for structured SLM outputs --------------------
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from agentradar_core import get_logger
 from agentradar_store import (
@@ -227,5 +227,88 @@ async def concept_detail(name: str) -> dict[str, Any]:
             }
             for edge in raw["edges"]
             if edge.get("type") is not None
+        ],
+    }
+
+
+# --------------------------------------------
+# Forecaster
+# ---------------------------------––---------
+
+@router.get("/forecasts/recent")
+async def forecasts_recent(limit: int = Query(10, ge=1, le=50)) -> list[dict]:
+    """
+    Most recent forecasts the Forecaster has produced. Ordered newest first.
+    """
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, concept_name, claim, confidence, confidence_band,
+                   horizon_months, reasoning, cited_source_ids, predicted_at,
+                   outcome, graded_at
+            FROM forecasts
+            ORDER BY predicted_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    return [
+        {
+            "id": str(r["id"]),
+            "concept_name": r["concept_name"],
+            "claim": r["claim"],
+            "confidence": float(r["confidence"]),
+            "confidence_band": r["confidence_band"],
+            "horizon_months": r["horizon_months"],
+            "reasoning": r["reasoning"],
+            "cited_source_ids": list(r["cited_source_ids"] or []),
+            "predicted_at": r["predicted_at"].isoformat(),
+            "outcome": r["outcome"],
+            "graded_at": r["graded_at"].isoformat() if r["graded_at"] else None,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/source-breakdown")
+async def source_breakdown() -> dict:
+    """
+    Counts of mentions grouped by source type. Lets the dashboard show
+    'where the system's signal is coming from' at a glance.
+
+    Returns:
+        {
+          "total_mentions": <int>,
+          "by_source_type": [
+            {"source_type": "arxiv",  "mentions": N, "percentage": 0.XX},
+            {"source_type": "blog",   "mentions": N, "percentage": 0.XX},
+            ...
+          ]
+        }
+    Sorted by mentions desc.
+    """
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT source_type::text AS st, COUNT(*)::int AS n
+            FROM mention_events
+            GROUP BY source_type
+            ORDER BY n DESC
+            """
+        )
+    total = sum(r["n"] for r in rows) or 1  # avoid div-by-zero
+    return {
+        "total_mentions": total if rows else 0,
+        "by_source_type": [
+            {
+                "source_type": r["st"],
+                "mentions": r["n"],
+                "percentage": round(r["n"] / total, 4),
+            }
+            for r in rows
         ],
     }

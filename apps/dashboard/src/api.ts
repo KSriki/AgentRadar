@@ -4,6 +4,8 @@ import type {
   PendingTriple,
   RecentActivity,
   TopConcept,
+  Forecast,
+  SourceBreakdown,
 } from "./types";
 
 // All paths are relative — same-origin via the nginx proxy in prod,
@@ -28,4 +30,8 @@ export const api = {
     fetchJson<TopConcept[]>(
       `/api/top-concepts?limit=${limit}&window_days=${windowDays}`
     ),
+  forecastsRecent: (limit = 10) =>
+    fetchJson<Forecast[]>(`/api/forecasts/recent?limit=${limit}`),
+  sourceBreakdown: () =>
+    fetchJson<SourceBreakdown>("/api/source-breakdown"),
 };

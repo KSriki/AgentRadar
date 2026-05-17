@@ -29,8 +29,17 @@ class SLMClient(Protocol):
         user: str,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        response_format: dict | None = None,
     ) -> str:
-        """Return the model's text response. No streaming, no tool use."""
+        """
+        Return the model's text response. No streaming, no tool use.
+
+        Args:
+            response_format: Optional JSON schema for grammar-constrained
+                output. When provided, the runtime enforces the schema,
+                so even small models reliably emit valid JSON matching the
+                shape. Use whenever the caller needs to parse() the result.
+        """
         ...
 
 
@@ -59,8 +68,9 @@ class OllamaClient:
         user: str,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        response_format: dict | None = None,
     ) -> str:
-        payload = {
+        payload: dict = {
             "model": self._cfg.ollama_model,
             "messages": [
                 {"role": "system", "content": system},
@@ -74,6 +84,13 @@ class OllamaClient:
                 else self._cfg.temperature,
             },
         }
+        # Ollama's `format` param accepts a JSON schema dict (since 0.5) and
+        # constrains the model's output to match. Even 3B models become
+        # reliable. Without this, small models often emit set literals or
+        # arrays where strings/ints are expected.
+        if response_format is not None:
+            payload["format"] = response_format
+
         resp = await self._http.post("/api/chat", json=payload)
         resp.raise_for_status()
         data = resp.json()
@@ -102,25 +119,38 @@ class BedrockClient:
         user: str,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        response_format: dict | None = None,
     ) -> str:
         # Local import so we don't pay aioboto3's import cost when using Ollama
         import aioboto3
 
         session = aioboto3.Session(region_name=self._region)
         async with session.client("bedrock-runtime") as br:
+            body: dict = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": max_tokens or self._cfg.max_tokens,
+                "temperature": temperature
+                if temperature is not None
+                else self._cfg.temperature,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+            }
+            # Bedrock's Claude API doesn't support JSON-schema constraints
+            # the same way Ollama does. We honor response_format by adding
+            # a follow-up system instruction; Claude's already-strong JSON
+            # adherence means this works in practice. When we wire actual
+            # tool-use mode in Session 2, this becomes properly enforced.
+            if response_format is not None:
+                body["system"] += (
+                    "\n\nReturn ONLY valid JSON matching this schema:\n"
+                    + json.dumps(response_format)
+                )
+
             resp = await br.invoke_model(
                 modelId=self._cfg.bedrock_model_id,
                 contentType="application/json",
                 accept="application/json",
-                body=json.dumps({
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": max_tokens or self._cfg.max_tokens,
-                    "temperature": temperature
-                    if temperature is not None
-                    else self._cfg.temperature,
-                    "system": system,
-                    "messages": [{"role": "user", "content": user}],
-                }),
+                body=json.dumps(body),
             )
             payload = json.loads(await resp["body"].read())
         text: str = payload["content"][0]["text"]

@@ -502,3 +502,110 @@ async def list_recent_forecasts(limit: int = 10) -> dict[str, Any]:
     ]
     return {"forecasts": forecasts, "count": len(forecasts)}
 
+@mcp.tool
+async def select_forecast_candidate(
+    velocity_window_days: int = 90,
+    cooldown_days: int = 14,
+) -> dict[str, Any]:
+    """
+    Select the highest-velocity concept that hasn't been forecasted recently.
+
+    Used by the Forecaster's auto-selection logic. Returns None when no
+    candidate is available (empty graph, or all top concepts in cooldown).
+
+    Args:
+        velocity_window_days: How far back to count mentions for velocity ranking.
+        cooldown_days: Concepts forecasted within this window are excluded.
+
+    Returns:
+        {"concept_name": <str>} when found,
+        {"concept_name": null} when no candidate is available.
+    """
+    if not (1 <= velocity_window_days <= 365):
+        raise ValueError(f"velocity_window_days must be in [1,365], got {velocity_window_days}")
+    if not (0 <= cooldown_days <= 90):
+        raise ValueError(f"cooldown_days must be in [0,90], got {cooldown_days}")
+
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            WITH recent_forecasts AS (
+                SELECT DISTINCT concept_name
+                FROM forecasts
+                WHERE predicted_at > NOW() - make_interval(days => $2)
+            ),
+            concept_volume AS (
+                SELECT concept_name, COUNT(*)::int AS n
+                FROM mention_events
+                WHERE observed_at > NOW() - make_interval(days => $1)
+                GROUP BY concept_name
+            )
+            SELECT concept_name
+            FROM concept_volume
+            WHERE concept_name NOT IN (SELECT concept_name FROM recent_forecasts)
+            ORDER BY n DESC
+            LIMIT 1
+            """,
+            velocity_window_days, cooldown_days,
+        )
+    return {"concept_name": row["concept_name"] if row else None}
+
+
+@mcp.tool
+async def get_forecast_evidence(
+    concept_name: str,
+    velocity_window_days: int = 90,
+) -> dict[str, Any]:
+    """
+    Bundle all the evidence the Forecaster needs about one concept into a
+    single MCP call. Reduces round-trips and keeps the agent-to-storage
+    boundary clean (no direct PgClient access from agent code).
+
+    Returns:
+        {
+          "concept_name": str,
+          "total_mentions": int,
+          "source_diversity": int,
+          "mentions_by_source": {<source_type>: <count>, ...},
+          "mention_velocity": {<velocity dict from PgClient.mention_velocity>},
+        }
+    """
+    if not concept_name.strip():
+        raise ValueError("concept_name required")
+    if not (1 <= velocity_window_days <= 365):
+        raise ValueError(
+            f"velocity_window_days must be in [1,365], got {velocity_window_days}"
+        )
+
+    pg = get_pg_client()
+
+    # Mention velocity (existing method, time-bucketed)
+    velocity = await pg.mention_velocity(
+        concept_name, window_days=velocity_window_days,
+    )
+
+    # Mentions broken down by source type
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT source_type::text AS st, COUNT(*)::int AS n
+            FROM mention_events
+            WHERE concept_name = $1
+            GROUP BY source_type
+            """,
+            concept_name,
+        )
+    mentions_by_source = {r["st"]: r["n"] for r in rows}
+    total_mentions = sum(mentions_by_source.values())
+    source_diversity = len(mentions_by_source)
+
+    return {
+        "concept_name": concept_name,
+        "total_mentions": total_mentions,
+        "source_diversity": source_diversity,
+        "mentions_by_source": mentions_by_source,
+        "mention_velocity": velocity,
+    }
