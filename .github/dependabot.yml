@@ -1,10 +1,32 @@
 version: 2
 updates:
+  # Python dependencies: monthly, all patch+minor grouped into one PR
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    # Major version bumps still come as individual PRs so each can be
+    # evaluated separately — they're more likely to have breaking changes
+    labels:
+      - "dependencies"
+
+  # GitHub Actions: monthly, all updates grouped (Action major-versions
+  # are usually safe — they're the workflow file's deps, not the app's)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    groups:
+      actions-all:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "github-actions"
