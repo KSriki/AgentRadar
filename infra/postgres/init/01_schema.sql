@@ -89,3 +89,24 @@ CREATE INDEX IF NOT EXISTS forecasts_outcome_idx
     ON forecasts(outcome) WHERE outcome IS NOT NULL;
 CREATE INDEX IF NOT EXISTS forecasts_concept_name_idx
     ON forecasts(concept_name);
+
+
+
+-- Weekly digests produced by the ROMA digest workflow.
+-- Each digest snapshots its N forecasts so it's reproducible later
+-- regardless of subsequent forecasts table churn.
+CREATE TABLE IF NOT EXISTS digests (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    label              TEXT NOT NULL DEFAULT '',
+    themes             TEXT NOT NULL,
+    standout           TEXT NOT NULL DEFAULT '',
+    forecasts_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb,
+    average_confidence DOUBLE PRECISION NOT NULL
+                           CHECK (average_confidence >= 0.0 AND average_confidence <= 1.0),
+    confidence_band    TEXT NOT NULL
+                           CHECK (confidence_band IN ('weak', 'medium', 'high')),
+    generated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS digests_generated_at_idx
+    ON digests(generated_at DESC);

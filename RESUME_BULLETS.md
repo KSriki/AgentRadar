@@ -473,6 +473,39 @@ These aren't headline features — they're the lessons that distinguish
   now consistent across all five agents: state access through the
   tool layer, no exceptions.
 
+## Composite Workflows via ROMA Recursion (Session 2)
+
+- **Implemented the full ROMA recursion pattern**: the same compiled
+  StateGraph runs at multiple depths, with composite tasks decomposing
+  into atomic subtasks that re-invoke the graph at depth+1. Three-level
+  recursion (digest → top_n → concept) working end-to-end with a hard
+  depth cap preventing runaway invocation
+- **Parent-context distillation** — recursive children receive a small
+  distilled dict (kind, role, position) rather than the full parent
+  state. This is the README's explicit anti-context-bloat pattern from
+  the ROMA paper, now actually executing. Without it, deep agent
+  hierarchies bloat context and silently fail; with it, recursion is
+  bounded regardless of depth
+- **Composite-of-composite workflow** (forecast.digest): an outer task
+  decomposes into a forecast.top_n, which itself decomposes into N
+  forecast.concept atoms. Outer Aggregator synthesizes a narrative
+  themes paragraph + standout pick via SLM with structured-output
+  schema; inner forecasts persist independently via propose_forecast.
+  The data model — digests table with forecasts_snapshot JSONB —
+  ensures reproducibility months later regardless of forecast churn
+- **Defensive parsing for small-model output**: Ollama's JSON-format
+  mode enforces structure (object/string/number) but NOT semantic
+  bounds (min/max, enum). Added normalization for the predictable
+  miscoding patterns (confidence 7 → 0.7, 70 → 0.7) rather than
+  failing into weak-fallback on recoverable mistakes. General lesson:
+  runtime structural constraint is reliable; semantic ranges still
+  need defense in depth
+- **Hybrid synthesis** — narrative summarization is a bounded SLM
+  call (themes paragraph, ~3 sentences) rather than asking the model
+  to produce the whole digest. Small models handle bounded-scope
+  generation reliably; constraining the scope keeps quality usable
+  even at 3B parameters
+
 ---
 
 

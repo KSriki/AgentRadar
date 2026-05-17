@@ -108,3 +108,81 @@ class Forecaster:
             "cooldown_days": 14,
         })
         return result.data.get("concept_name")
+    
+    async def run_topn(self, mcp: Client, top_n: int = 5) -> dict[str, Any]:
+        """
+        Execute a forecast.top_n composite workflow.
+
+        Runs the Planner→Executor→Aggregator recursion through the same
+        ROMA graph the atomic Forecaster uses. After this returns, N
+        forecast rows have been persisted (one per top-N concept).
+        """
+        log.info("forecaster.run_topn.start", top_n=top_n)
+
+        task: ForecastTask = {"kind": "forecast.top_n", "top_n": top_n}
+        initial_state: ForecastState = {
+            "task": task,
+            "depth": 0,
+            "trace_id": f"topn-{int(time.time())}",
+            "parent_context": {},
+            "mcp": mcp,
+            "subtask_results": [],
+        }
+        graph = get_roma_graph()
+        final_state = await graph.ainvoke(initial_state)
+
+        topn_forecasts = final_state.get("final_topn", [])
+
+        # Each top-N forecast has already been persisted by the inner
+        # forecast.concept recursion calling propose_forecast. We don't
+        # double-persist them here.
+        log.info("forecaster.run_topn.done", count=len(topn_forecasts))
+        return {
+            "forecasts_produced": len(topn_forecasts),
+            "concepts": [f["concept_name"] for f in topn_forecasts],
+        }
+
+    async def run_digest(self, mcp: Client, top_n: int = 5,
+                          label: str | None = None) -> dict[str, Any]:
+        """Execute the forecast.digest composite workflow."""
+        actual_label = label or f"Weekly digest, week of {time.strftime('%Y-%m-%d')}"
+        log.info("forecaster.run_digest.start",
+                 label=actual_label, top_n=top_n)
+
+        task: ForecastTask = {
+            "kind": "forecast.digest",
+            "top_n": top_n,
+            "digest_label": actual_label,
+        }
+        initial_state: ForecastState = {
+            "task": task,
+            "depth": 0,
+            "trace_id": f"digest-{int(time.time())}",
+            "parent_context": {},
+            "mcp": mcp,
+            "subtask_results": [],
+        }
+        graph = get_roma_graph()
+        final_state = await graph.ainvoke(initial_state)
+
+        digest = final_state.get("final_digest", {})
+        if not digest or not digest.get("forecasts"):
+            log.warning("forecaster.run_digest.no_digest_produced")
+            return {"digests_produced": 0}
+
+        # Persist the digest itself (forecasts inside are already persisted)
+        result = await mcp.call_tool("propose_digest", {
+            "label": digest["label"],
+            "themes": digest["themes"],
+            "standout": digest["standout"],
+            "forecasts": digest["forecasts"],
+            "average_confidence": digest["average_confidence"],
+            "confidence_band": final_state.get("confidence_band", "weak"),
+        })
+        log.info("forecaster.run_digest.persisted", **result.data)
+        return {
+            "digests_produced": 1,
+            "digest_id": result.data.get("digest_id"),
+            "forecasts_count": len(digest["forecasts"]),
+            "band": final_state.get("confidence_band"),
+        }

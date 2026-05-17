@@ -609,3 +609,127 @@ async def get_forecast_evidence(
         "mentions_by_source": mentions_by_source,
         "mention_velocity": velocity,
     }
+
+@mcp.tool
+async def select_top_n_concepts(
+    top_n: int = 5,
+    velocity_window_days: int = 90,
+    cooldown_days: int = 14,
+) -> dict[str, Any]:
+    """
+    Return the top-N highest-velocity concepts that haven't been
+    forecasted in the cooldown window. Used by the Planner for
+    forecast.top_n / forecast.digest decomposition.
+
+    Returns:
+        {"concept_names": [<str>, ...]}  (may be empty if graph sparse)
+    """
+    if not (1 <= top_n <= 20):
+        raise ValueError(f"top_n must be in [1,20], got {top_n}")
+    if not (1 <= velocity_window_days <= 365):
+        raise ValueError(f"velocity_window_days must be in [1,365]")
+    if not (0 <= cooldown_days <= 90):
+        raise ValueError(f"cooldown_days must be in [0,90]")
+
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            WITH recent_forecasts AS (
+                SELECT DISTINCT concept_name
+                FROM forecasts
+                WHERE predicted_at > NOW() - make_interval(days => $2)
+            ),
+            concept_volume AS (
+                SELECT concept_name, COUNT(*)::int AS n
+                FROM mention_events
+                WHERE observed_at > NOW() - make_interval(days => $1)
+                GROUP BY concept_name
+            )
+            SELECT concept_name
+            FROM concept_volume
+            WHERE concept_name NOT IN (SELECT concept_name FROM recent_forecasts)
+            ORDER BY n DESC
+            LIMIT $3
+            """,
+            velocity_window_days, cooldown_days, top_n,
+        )
+    return {"concept_names": [r["concept_name"] for r in rows]}
+
+
+@mcp.tool
+async def propose_digest(
+    label: str,
+    themes: str,
+    standout: str,
+    forecasts: list[dict],
+    average_confidence: float,
+    confidence_band: str,
+) -> dict[str, Any]:
+    """
+    Persist a weekly digest. Each digest references N forecast rows.
+
+    The forecasts JSON snapshot is stored alongside the digest so the
+    digest is reproducible later even if individual forecast rows get
+    superseded.
+    """
+    if not (0.0 <= average_confidence <= 1.0):
+        raise ValueError(
+            f"average_confidence must be in [0,1], got {average_confidence}"
+        )
+    if confidence_band not in ("weak", "medium", "high"):
+        raise ValueError(
+            f"confidence_band must be weak|medium|high, got {confidence_band!r}"
+        )
+
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO digests
+                (label, themes, standout, forecasts_snapshot,
+                 average_confidence, confidence_band, generated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            RETURNING id
+            """,
+            label, themes, standout, json.dumps(forecasts),
+            average_confidence, confidence_band,
+        )
+    return {"digest_id": str(row["id"]), "status": "stored"}
+
+
+@mcp.tool
+async def list_recent_digests(limit: int = 5) -> dict[str, Any]:
+    """Return the most recent digests, newest first."""
+    limit = max(1, min(limit, 50))
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, label, themes, standout, forecasts_snapshot,
+                   average_confidence, confidence_band, generated_at
+            FROM digests
+            ORDER BY generated_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    return {
+        "digests": [
+            {
+                "digest_id": str(r["id"]),
+                "label": r["label"],
+                "themes": r["themes"],
+                "standout": r["standout"],
+                "forecasts": json.loads(r["forecasts_snapshot"]),
+                "average_confidence": float(r["average_confidence"]),
+                "confidence_band": r["confidence_band"],
+                "generated_at": r["generated_at"].isoformat(),
+            }
+            for r in rows
+        ],
+        "count": len(rows),
+    }

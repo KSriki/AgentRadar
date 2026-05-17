@@ -76,6 +76,19 @@ class ScheduledJob:
         return (now - self.last_run_at) >= self.interval_seconds
 
 
+class _DigestRunnerAgent:
+    """Adapter so a digest workflow plugs into the supervisor's per-job
+    runner just like any other Agent."""
+
+    name = "digest"
+
+    def __init__(self, top_n: int = 5) -> None:
+        self._top_n = top_n
+
+    async def run(self, mcp: Client) -> dict[str, Any]:
+        forecaster = Forecaster()
+        return await forecaster.run_digest(mcp, top_n=self._top_n)
+
 class Supervisor:
     """The scheduler loop."""
 
@@ -264,6 +277,11 @@ def build_supervisor() -> Supervisor:
         # highest-velocity-not-recently-forecasted concept each run.
         return Forecaster(concept_name=None)
     
+    def make_digest_forecaster() -> Agent:
+        # Same Forecaster class, but the runner will dispatch on a
+        # composite workflow rather than the atomic default.
+        return _DigestRunnerAgent(top_n=cfg.digest_top_n)
+    
     trend_source_factories = [
         lambda: GithubTrendSource(),
         lambda: HnTrendSource(),
@@ -305,6 +323,11 @@ def build_supervisor() -> Supervisor:
             name="forecaster",
             interval_seconds=cfg.forecaster_interval,
             factory=make_forecaster,
+        ),
+        ScheduledJob(
+            name="digest-weekly",
+            interval_seconds=cfg.digest_interval,
+            factory=make_digest_forecaster,
         ),
     ]
     return Supervisor(jobs=jobs, fire_on_startup=cfg.fire_on_startup)

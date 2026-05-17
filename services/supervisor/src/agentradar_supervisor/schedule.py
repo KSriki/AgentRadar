@@ -52,6 +52,10 @@ class ScheduleSettings(BaseSettings):
     # (e.g., 1800 for 30 min) for demos.
     forecaster_interval: int = Field(default=24 * 60 * 60)
 
+    # Digest: weekly. Composite workflow producing one digest from top-5 forecasts.
+    digest_interval: int = Field(default=7 * 24 * 60 * 60)
+    digest_top_n: int = Field(default=5)
+
 
 def load_schedule() -> ScheduleSettings:
     """Read the schedule from env. Cached implicitly via pydantic."""
