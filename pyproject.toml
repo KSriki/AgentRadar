@@ -21,7 +21,7 @@ dev = [
     "mypy>=1.11",
     "types-boto3>=1.0",
     # Scout dependencies
-    "feedparser>=6.0",          # arXiv RSS parsing
+    "feedparser>=6.0.12",          # arXiv RSS parsing
     "httpx>=0.27",              # async HTTP
     "anthropic[bedrock]>=0.40", # SLM via Bedrock for concept extraction
     "pre-commit>=4.0",
