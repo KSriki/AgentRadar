@@ -1,16 +1,14 @@
-name: CI
+name: Integration
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
-  unit:
-    name: Unit tests + lint
+  integration:
+    name: Integration tests against live data plane
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -28,10 +26,42 @@ jobs:
       - name: Install workspace
         run: uv sync --all-extras --dev
 
-      - name: Run pre-commit hooks (lint + format check)
-        run: uv run pre-commit run --all-files --show-diff-on-failure
+      - name: Bring up data plane
+        # docker compose is installed by default on ubuntu-latest runners.
+        # The data plane brings up postgres, neo4j, minio + init sidecars
+        # that apply schema and create the MinIO bucket.
+        run: |
+          cp .env.example .env
+          docker compose up -d postgres neo4j minio init-postgres init-neo4j init-minio
+          # Wait for init sidecars to finish their one-shot work
+          docker compose wait init-postgres init-neo4j init-minio
 
-      - name: Run unit tests
-        # No -m marker: pytest defaults pick up unit tests; integration tests
-        # are gated by their own marker and skip silently.
-        run: uv run pytest tests/unit/ -v --tb=short
+      - name: Verify data plane is healthy
+        run: |
+          docker compose ps
+          docker compose exec -T postgres psql -U agentradar -d agentradar -c '\dt'
+
+      - name: Start API
+        # Supervisor isn't needed for integration tests (the test client
+        # talks to MCP directly, not via the supervisor's scheduler).
+        # Skipping it saves ~30 seconds of build + boot time.
+        run: |
+          docker compose up -d api
+          # Wait for the API's healthcheck to pass
+          for i in {1..30}; do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "API ready"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run integration tests
+        # The conftest SLM-mock fixture autouses for the integration suite
+        # so we don't need Ollama in CI.
+        run: uv run pytest -m integration tests/integration/ -v --tb=short
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
