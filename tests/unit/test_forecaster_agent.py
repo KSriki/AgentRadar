@@ -51,78 +51,63 @@ def _patch_roma(monkeypatch, return_state):
     return mock_graph
 
 
-def _patch_pg(monkeypatch, candidate: str | None):
-    """Replace get_pg_client so _select_candidate returns the given concept (or None)."""
-    mock_pool = AsyncMock()
-    mock_conn = AsyncMock()
-    if candidate is None:
-        mock_conn.fetchrow = AsyncMock(return_value=None)
-    else:
-        mock_conn.fetchrow = AsyncMock(return_value={"concept_name": candidate})
-
-    # Build the async context manager `pool.acquire()` returns
-    class _AcquireCtx:
-        async def __aenter__(self):
-            return mock_conn
-        async def __aexit__(self, *args):
-            return False
-
-    mock_pool.acquire = MagicMock(return_value=_AcquireCtx())
-
-    mock_pg = MagicMock()
-    mock_pg._ensure = AsyncMock(return_value=mock_pool)
-    monkeypatch.setattr(
-        "agentradar_supervisor.agents.forecaster.get_pg_client",
-        lambda: mock_pg,
+def _queue_candidate_response(mcp, concept_name: str | None) -> None:
+    """Queue the MCP response that the Forecaster's auto-select call expects."""
+    # The mock has its own queueing — push a select_forecast_candidate response
+    mcp.responses.setdefault("select_forecast_candidate", []).append(
+        {"concept_name": concept_name}
     )
-    return mock_pg
 
 
 # ---- Candidate selection ------------------------------------------------
 
-
 class TestCandidateSelection:
     @pytest.mark.asyncio
     async def test_forced_concept_skips_selection(self, mock_mcp, monkeypatch):
-        """When concept_name is given to __init__, _select_candidate isn't called."""
+        """When concept_name is given to __init__, select_forecast_candidate
+        is never called."""
         _patch_roma(monkeypatch, _final_state_with_forecast("ForcedConcept"))
-
-        # Set up pg mock to RAISE if called — proving selection was skipped
-        mock_pg = MagicMock()
-        mock_pg._ensure = AsyncMock(side_effect=AssertionError(
-            "Postgres should not be queried when concept is forced"
-        ))
-        monkeypatch.setattr(
-            "agentradar_supervisor.agents.forecaster.get_pg_client",
-            lambda: mock_pg,
-        )
 
         agent = Forecaster(concept_name="ForcedConcept")
         summary = await agent.run(mock_mcp)
         assert summary["forecasts_produced"] == 1
         assert summary["concept"] == "ForcedConcept"
 
+        # Verify select_forecast_candidate was NOT called
+        select_calls = [
+            c for c in mock_mcp.calls if c["tool"] == "select_forecast_candidate"
+        ]
+        assert len(select_calls) == 0
+
     @pytest.mark.asyncio
     async def test_auto_select_picks_db_candidate(self, mock_mcp, monkeypatch):
-        _patch_pg(monkeypatch, candidate="AutoConcept")
+        _queue_candidate_response(mock_mcp, "AutoConcept")
         _patch_roma(monkeypatch, _final_state_with_forecast("AutoConcept"))
 
-        agent = Forecaster()  # no concept_name → auto-select
+        agent = Forecaster()  # no concept_name → auto-select via MCP
         summary = await agent.run(mock_mcp)
         assert summary["concept"] == "AutoConcept"
         assert summary["forecasts_produced"] == 1
 
+        # Verify select_forecast_candidate WAS called
+        select_calls = [
+            c for c in mock_mcp.calls if c["tool"] == "select_forecast_candidate"
+        ]
+        assert len(select_calls) == 1
+
     @pytest.mark.asyncio
     async def test_no_candidate_returns_zero_forecasts(self, mock_mcp, monkeypatch):
-        """Empty DB → _select_candidate returns None → agent returns 0 forecasts."""
-        _patch_pg(monkeypatch, candidate=None)
+        """Empty DB → select_forecast_candidate returns null → zero forecasts."""
+        _queue_candidate_response(mock_mcp, None)
 
         agent = Forecaster()
         summary = await agent.run(mock_mcp)
         assert summary["forecasts_produced"] == 0
-        # Should not have invoked the graph or made any MCP calls
-        assert len(mock_mcp.calls) == 0
-
+        # propose_forecast should not have been called
+        propose_calls = [
+            c for c in mock_mcp.calls if c["tool"] == "propose_forecast"
+        ]
+        assert len(propose_calls) == 0
 
 # ---- Persistence call shape ---------------------------------------------
 

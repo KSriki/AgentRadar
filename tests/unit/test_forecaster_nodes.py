@@ -13,7 +13,7 @@ import pytest
 
 from agentradar_supervisor.nodes import (
     MAX_DEPTH,
-    aggregate,
+    _aggregate_concept,
     atomize,
     route_after_atomize,
     route_after_plan,
@@ -76,9 +76,10 @@ class TestRouting:
 
 # ---- Aggregator ----------------------------------------------------------
 
-
 class TestAggregate:
-    """Confidence banding and weak-fallback behavior."""
+    """Confidence banding and weak-fallback behavior. Targets
+    _aggregate_concept directly (the sync sub-aggregator) rather than
+    the async top-level dispatch."""
 
     @pytest.mark.parametrize("confidence,expected_band", [
         (0.0, "weak"),
@@ -97,17 +98,16 @@ class TestAggregate:
             },
             "evidence": {},
         }
-        result = aggregate(state)
+        result = _aggregate_concept(state)
         assert result["confidence_band"] == expected_band
         assert result["final_forecast"]["confidence"] == confidence
 
     def test_missing_candidate_produces_weak_fallback(self):
-        """No candidate forecast → weak band, placeholder claim, never crashes."""
         state = {
             "task": {"kind": "forecast.concept", "concept_name": "X"},
             "evidence": {"total_mentions": 5},
         }
-        result = aggregate(state)
+        result = _aggregate_concept(state)
         assert result["confidence_band"] == "weak"
         ff = result["final_forecast"]
         assert ff["confidence"] == 0.0
@@ -123,7 +123,7 @@ class TestAggregate:
             },
             "evidence": {"x": 1},
         }
-        result = aggregate(state)
+        result = _aggregate_concept(state)
         ff = result["final_forecast"]
         assert ff["concept_name"] == "TargetConcept"
         assert ff["cited_concept_ids"] == ["A", "B"]
@@ -139,16 +139,15 @@ class TestAggregate:
             },
             "evidence": {},
         }
-        result = aggregate(state)
+        result = _aggregate_concept(state)
         assert result["final_forecast"]["reasoning"] == "Multi-source convergence detected"
 
     def test_aggregator_handles_empty_candidate_dict(self):
-        """{} candidate_forecast is treated the same as missing — weak-fallback."""
         state = {
             "task": {"kind": "forecast.concept", "concept_name": "X"},
             "candidate_forecast": {},
             "evidence": {},
         }
-        result = aggregate(state)
+        result = _aggregate_concept(state)
         assert result["confidence_band"] == "weak"
         assert result["final_forecast"]["confidence"] == 0.0

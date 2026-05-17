@@ -310,6 +310,22 @@ class MockMCPClient:
                 return self._Result({"forecast_id": "mock-forecast-id", "status": "stored"})
             if name == "list_recent_forecasts":                                         # <-- new (bonus)
                 return self._Result({"forecasts": [], "count": 0})
+            if name == "propose_digest":
+                return self._Result({"digest_id": "mock-digest-id", "status": "stored"})
+            if name == "list_recent_digests":
+                return self._Result({"digests": [], "count": 0})
+            if name == "select_forecast_candidate":
+                return self._Result({"concept_name": None})  # default to "no candidate"
+            if name == "select_top_n_concepts":
+                return self._Result({"concept_names": []})
+            if name == "get_forecast_evidence":
+                return self._Result({
+                    "concept_name": "MockConcept",
+                    "total_mentions": 0,
+                    "source_diversity": 0,
+                    "mentions_by_source": {},
+                    "mention_velocity": {"velocity": 0.0, "buckets": []},
+                })
             raise RuntimeError(f"MockMCPClient: no queued response for tool {name!r}")
         return self._Result(queue.pop(0))
 
