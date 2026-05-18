@@ -1,5 +1,6 @@
 # AgentRadar
 
+
 [![CI](https://github.com/KSriki/AgentRadar/actions/workflows/ci.yml/badge.svg)](https://github.com/KSriki/AgentRadar/actions/workflows/ci.yml)
 [![Integration](https://github.com/KSriki/AgentRadar/actions/workflows/integration.yml/badge.svg)](https://github.com/KSriki/AgentRadar/actions/workflows/integration.yml)
 
@@ -437,3 +438,7 @@ MIT — see [LICENSE](./LICENSE).
 Built on the shoulders of giants: LangGraph, MCP (Anthropic), A2A (Google),
 pgvector, Neo4j APOC, and the broader open-source agentic AI ecosystem this
 project aims to track.
+
+## Author
+
+Srikant Kumar Kalaputapu
