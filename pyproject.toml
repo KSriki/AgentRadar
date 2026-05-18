@@ -18,7 +18,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5",
-    "mypy>=1.11",
+    "mypy>=2.1.0",
     "types-boto3>=1.0",
     # Scout dependencies
     "feedparser>=6.0",          # arXiv RSS parsing
