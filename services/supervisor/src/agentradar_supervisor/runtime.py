@@ -77,7 +77,9 @@ class ScheduledJob:
     last_summary: dict[str, Any] = field(default_factory=dict)
 
     def is_due(self, now: float) -> bool:
-        return (now - self.last_run_at) >= self.interval_seconds
+        if self.last_run_at == 0.0:
+            return True  # never run before, always due
+        return now - self.last_run_at >= self.interval_seconds
 
 
 class _DigestRunnerAgent:

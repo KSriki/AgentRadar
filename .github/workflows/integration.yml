@@ -70,10 +70,16 @@ jobs:
 
       - name: Run init sidecars (schema + bucket setup)
         run: |
+          # Run sidecars in foreground; they exit when done. Their exit code
+          # is propagated, so this step fails fast if either init script breaks.
           docker compose -f docker-compose.yml -f docker-compose.test.yml \
-              up init-neo4j-test init-minio-test
+              up --abort-on-container-exit \
+              --exit-code-from init-neo4j-test \
+              init-neo4j-test
           docker compose -f docker-compose.yml -f docker-compose.test.yml \
-              wait init-neo4j-test init-minio-test
+              up --abort-on-container-exit \
+              --exit-code-from init-minio-test \
+              init-minio-test
 
       - name: Start api-test
         run: |
