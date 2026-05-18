@@ -62,14 +62,14 @@ class TestPostgresQueries:
     @pytest.mark.asyncio
     async def test_mention_events_table_exists(self, test_pg_conn):
         result = await test_pg_conn.fetchval(
-            "SELECT COUNT(*) FROM information_schema.tables " "WHERE table_name = 'mention_events'"
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'mention_events'"
         )
         assert result == 1
 
     @pytest.mark.asyncio
     async def test_digests_table_exists(self, test_pg_conn):
         result = await test_pg_conn.fetchval(
-            "SELECT COUNT(*) FROM information_schema.tables " "WHERE table_name = 'digests'"
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'digests'"
         )
         assert result == 1
 
@@ -92,8 +92,7 @@ class TestNeo4jSchema:
     @pytest.mark.asyncio
     async def test_concept_name_unique_constraint_exists(self, test_neo4j_session):
         result = await test_neo4j_session.run(
-            "SHOW CONSTRAINTS YIELD name WHERE name = 'concept_name_unique' "
-            "RETURN count(name) AS n"
+            "SHOW CONSTRAINTS YIELD name WHERE name = 'concept_name_unique' RETURN count(name) AS n"
         )
         record = await result.single()
         assert record["n"] == 1

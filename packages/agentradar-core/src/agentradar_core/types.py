@@ -168,8 +168,7 @@ class CriticVerdict(BaseModel):
 
     verdict: Literal["approved", "rejected"]
     reasoning: str = Field(
-        description="One-sentence explanation of why the source does or "
-        "doesn't support the claim."
+        description="One-sentence explanation of why the source does or doesn't support the claim."
     )
     confidence: float = Field(
         ge=0.0,

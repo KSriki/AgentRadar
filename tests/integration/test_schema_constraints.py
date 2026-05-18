@@ -75,7 +75,7 @@ class TestPostgresUniqueness:
         pool = await clean_pg._ensure()
         async with pool.acquire() as conn:
             count = await conn.fetchval(
-                "SELECT COUNT(*) FROM mention_events " "WHERE concept_name = $1 AND source_id = $2",
+                "SELECT COUNT(*) FROM mention_events WHERE concept_name = $1 AND source_id = $2",
                 "MCP",
                 "arxiv:2401.99999",
             )
@@ -115,5 +115,5 @@ class TestNeo4jUniqueness:
             and ("UNIQUE" in str(c).upper() or "uniqueness" in str(c).lower())
         ]
         assert len(concept_unique) >= 1, (
-            f"No UNIQUE constraint on Concept.name found. " f"Constraints visible: {constraints}"
+            f"No UNIQUE constraint on Concept.name found. Constraints visible: {constraints}"
         )

@@ -303,9 +303,9 @@ class TestArchitecturalRules:
     def test_nodes_module_does_not_import_get_pg_client(self):
         """Same rule for the ROMA node functions."""
         source = inspect.getsource(nodes)
-        assert (
-            "get_pg_client" not in source
-        ), "ROMA nodes must not import get_pg_client. Use MCP tools."
+        assert "get_pg_client" not in source, (
+            "ROMA nodes must not import get_pg_client. Use MCP tools."
+        )
 
     def test_critic_agent_does_not_import_get_pg_client(self):
         source = inspect.getsource(critic)
@@ -320,5 +320,5 @@ class TestArchitecturalRules:
         event-loop affinity. This test pins the distinction."""
         source = inspect.getsource(nodes)
         assert "get_slm_client" in source, (
-            "Confirm SLM client usage is still permitted (httpx-based, " "no event-loop affinity)."
+            "Confirm SLM client usage is still permitted (httpx-based, no event-loop affinity)."
         )

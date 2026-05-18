@@ -245,7 +245,7 @@ async def _execute_atomic(state: ForecastState) -> dict[str, Any]:
     slm = get_slm_client()
     parent_ctx = state.get("parent_context", {})
     context_hint = (
-        f"\n\nThis forecast is part of a top-{state.get('parent_context', {}).get('subtask_index', '')+1 if 'subtask_index' in parent_ctx else 'N'} "
+        f"\n\nThis forecast is part of a top-{state.get('parent_context', {}).get('subtask_index', '') + 1 if 'subtask_index' in parent_ctx else 'N'} "
         f"series within a digest."
         if "subtask_index" in parent_ctx
         else ""

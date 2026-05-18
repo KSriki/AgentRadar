@@ -81,7 +81,7 @@ async def stats() -> dict[str, int]:
     pool = await p._ensure()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT status, COUNT(*)::int AS n " "FROM pending_triples GROUP BY status"
+            "SELECT status, COUNT(*)::int AS n FROM pending_triples GROUP BY status"
         )
     by_status = {r["status"]: r["n"] for r in rows}
 

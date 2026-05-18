@@ -42,7 +42,7 @@ class BedrockTitanEmbeddings:
         embedding: list[float] = payload["embedding"]
         if len(embedding) != self._cfg.dim:
             raise ValueError(
-                f"Embedding dim mismatch: got {len(embedding)}, " f"expected {self._cfg.dim}"
+                f"Embedding dim mismatch: got {len(embedding)}, expected {self._cfg.dim}"
             )
         return embedding
 

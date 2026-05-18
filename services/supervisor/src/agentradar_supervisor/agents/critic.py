@@ -216,8 +216,7 @@ class Critic:
                 body = await s3.get_artifact(f"arxiv/{identifier}.json")
                 payload = json.loads(body.decode("utf-8"))
                 return (
-                    f"TITLE: {payload.get('title', '')}\n\n"
-                    f"ABSTRACT: {payload.get('summary', '')}"
+                    f"TITLE: {payload.get('title', '')}\n\nABSTRACT: {payload.get('summary', '')}"
                 )
 
             if prefix == "tavily":

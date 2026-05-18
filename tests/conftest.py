@@ -171,7 +171,7 @@ async def clean_pg(pg_client) -> AsyncIterator:
         pool = await pg_client._ensure()
         async with pool.acquire() as conn:
             await conn.execute(
-                "TRUNCATE pending_triples, mention_events, concept_embeddings " "RESTART IDENTITY"
+                "TRUNCATE pending_triples, mention_events, concept_embeddings RESTART IDENTITY"
             )
 
     await _wipe()
