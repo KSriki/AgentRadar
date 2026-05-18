@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+# Install system deps for uv to download/decompress Python
+RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends \
+        curl \
+        ca-certificates \
+        xz-utils && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install uv via the official install script (same path that worked in
+# one-shot container testing)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Install Python 3.12.8 to match repo's .python-version
+RUN uv python install 3.12.8
+
+WORKDIR /app
+
+CMD ["bash", "-c", "uv sync --all-extras --dev --frozen && uv run pytest -m integration tests/integration/ -v --tb=short"]

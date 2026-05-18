@@ -506,6 +506,47 @@ These aren't headline features — they're the lessons that distinguish
   generation reliably; constraining the scope keeps quality usable
   even at 3B parameters
 
+## Production-Grade CI/CD Pipeline
+
+- **Pre-commit hooks** (ruff lint/format, file hygiene) gate local commits
+  with `--exit-non-zero-on-fix` so auto-fixes require explicit review.
+  Cross-language hooks scoped properly: Python tooling skips the JS/TS
+  dashboard
+- **GitHub Actions split** by workload: unit tests + lint on every PR
+  (~45s feedback loop); integration tests against full docker-compose
+  data plane on merges to main (~3-5min). Buildx layer caching with
+  GHA cache reduces api image rebuilds from 60s to ~10s on cache hit
+- **Architectural-rule meta-tests** codify project conventions as
+  executable specifications. The "agents must not import get_pg_client"
+  rule lives in tests/, not docs/, so it survives refactors and onboarding
+- **Branch protection** on main with required CI status checks; ready
+  to transition to PR-driven flow when scaling beyond solo work
+- **Dependabot** configured for monthly grouped updates (Python + GHA),
+  avoiding the noise of weekly per-package PRs while preserving security
+  signal
+
+## Composite Forecaster Output as First-Class UI
+
+- **Digest workflow rendered in dashboard**: a fourth tab between
+  Forecasts and Operations surfaces the system's editorial output —
+  not just individual concept predictions but cross-cutting themes
+  paragraphs and standout picks the SLM synthesized
+- **Hero-treatment LatestDigestCard** with confidence-banded left
+  border, Sparkles icon signaling editorial work, themes block with
+  "What the system sees this week" framing, standout pulled into a
+  primary-bordered callout. Internal forecasts collapsible
+- **DigestTimelineCard** for historical digests as compact expandable
+  rows. Same react-query cache key shared with the hero so the count
+  selector (5/10/25/50) drives both in lockstep
+- **Diagnostic-first iteration on production output quality**: the
+  llama3.2:3b synthesis SLM initially emitted list-syntax instead of
+  prose for the themes field, despite the schema declaring `string`.
+  Discovered through visual review rather than test failures (the
+  schema enforces type, not semantic shape). Fix: more emphatic prompt
+  with both positive and negative examples. Same architectural lesson
+  as the confidence-as-decimal bug: small models need redundant
+  constraints with concrete examples
+
 ---
 
 

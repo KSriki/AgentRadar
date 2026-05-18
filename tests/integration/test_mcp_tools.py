@@ -10,12 +10,13 @@ Requires the api container running at http://localhost:8000.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 
 import pytest
 from fastmcp import Client
 
-MCP_URL = "http://localhost:8000/mcp/"
+MCP_URL = os.environ.get("TEST_MCP_URL", "http://localhost:8000/mcp/")
 
 
 @pytest.fixture

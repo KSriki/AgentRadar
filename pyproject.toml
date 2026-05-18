@@ -52,7 +52,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-m 'not integration'"
 markers = [
-    "integration: marks tests requiring the live data plane (deselect with '-m \"not integration\"')",
+    "integration: requires docker-compose test plane (auto-managed by session fixture in tests/integration/conftest.py)",
 ]
 
 [tool.mypy]

@@ -6,31 +6,13 @@ on:
 
 jobs:
   integration:
-    name: Integration tests against live data plane
+    name: Integration tests in containerized test plane
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-
-      - name: Install workspace
-        run: uv sync --all-extras --dev
-
-      # ----- Docker buildx + layer cache (Strategy A) -----
-      # Caches the buildkit layer cache between runs, keyed on files that
-      # affect the build. Cache hit = api image rebuilds in ~10s instead
-      # of ~60s. Cache miss (when deps change) = full rebuild, cache
-      # repopulated for next time.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -38,47 +20,40 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('**/Dockerfile', '**/pyproject.toml', '**/uv.lock') }}
+          key: ${{ runner.os }}-buildx-${{ hashFiles('tests/test-runner/Dockerfile', 'pyproject.toml', 'uv.lock', '**/Dockerfile') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Bring up data plane
+      - name: Prepare .env (test-runner reads it via volume mount)
+        run: cp .env.example .env
+
+      - name: Run integration tests
+        # 'make test-integration' brings up postgres-test, neo4j-test,
+        # minio-test, api-test + their init sidecars, then runs the
+        # test-runner container which executes pytest against the
+        # isolated test plane.
         env:
           DOCKER_BUILDKIT: 1
           COMPOSE_DOCKER_CLI_BUILD: 1
+        run: make test-integration
+
+      - name: Capture test plane logs on failure
+        if: failure()
         run: |
-          cp .env.example .env
-          docker compose up -d postgres neo4j minio init-neo4j init-minio
-          docker compose wait init-neo4j init-minio
+          echo "::group::postgres-test"
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs postgres-test --tail=100 || true
+          echo "::endgroup::"
+          echo "::group::neo4j-test"
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs neo4j-test --tail=100 || true
+          echo "::endgroup::"
+          echo "::group::minio-test"
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs minio-test --tail=100 || true
+          echo "::endgroup::"
+          echo "::group::api-test"
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs api-test --tail=100 || true
+          echo "::endgroup::"
 
-      - name: Verify data plane is healthy
-        run: |
-          docker compose ps
-          for i in {1..15}; do
-            if docker compose exec -T postgres pg_isready -U agentradar -d agentradar > /dev/null 2>&1; then
-              echo "Postgres ready"
-              break
-            fi
-            echo "Waiting for postgres... ($i/15)"
-            sleep 2
-          done
-          docker compose exec -T postgres psql -U agentradar -d agentradar -c '\dt'
-
-      - name: Start API
-        run: |
-          docker compose up -d api
-          for i in {1..30}; do
-            if curl -sf http://localhost:8000/health > /dev/null; then
-              echo "API ready"
-              break
-            fi
-            echo "Waiting for API... ($i/30)"
-            sleep 2
-          done
-
-      - name: Run integration tests
-        run: uv run pytest -m integration tests/integration/ -v --tb=short
-
-      - name: Tear down
+      - name: Tear down test plane
         if: always()
-        run: docker compose down -v
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans || true
