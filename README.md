@@ -257,6 +257,7 @@ a real answer.
 - pydantic-settings for fail-fast config validation
 - pytest with marker-gated unit/integration suites
 - ruff + mypy strict across the workspace
+- pre-commit
 
 ## Repository layout
 
