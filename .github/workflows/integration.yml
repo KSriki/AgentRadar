@@ -24,36 +24,99 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Prepare .env (test-runner reads it via volume mount)
+      - name: Prepare .env
         run: cp .env.example .env
 
-      - name: Run integration tests
-        # 'make test-integration' brings up postgres-test, neo4j-test,
-        # minio-test, api-test + their init sidecars, then runs the
-        # test-runner container which executes pytest against the
-        # isolated test plane.
+      - name: Build test-runner image
         env:
           DOCKER_BUILDKIT: 1
           COMPOSE_DOCKER_CLI_BUILD: 1
-        run: make test-integration
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+              build test-runner
 
-      - name: Capture test plane logs on failure
+      - name: Build api-test image
+        env:
+          DOCKER_BUILDKIT: 1
+          COMPOSE_DOCKER_CLI_BUILD: 1
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+              build api-test
+
+      - name: Start data plane services (postgres-test, neo4j-test, minio-test)
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+              up -d postgres-test neo4j-test minio-test
+          docker compose -f docker-compose.yml -f docker-compose.test.yml ps
+
+      - name: Wait for data plane healthy
+        run: |
+          for service in postgres-test neo4j-test minio-test; do
+            echo "Waiting for $service..."
+            for i in {1..30}; do
+              status=$(docker inspect --format '{{.State.Health.Status}}' agentradar-$service 2>/dev/null || echo "unknown")
+              if [ "$status" = "healthy" ]; then
+                echo "✓ $service is healthy"
+                break
+              fi
+              if [ "$i" = "30" ]; then
+                echo "✗ $service failed to become healthy in 60s"
+                docker logs agentradar-$service --tail=50
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Run init sidecars (schema + bucket setup)
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+              up init-neo4j-test init-minio-test
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+              wait init-neo4j-test init-minio-test
+
+      - name: Start api-test
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+              up -d api-test
+          # Wait for api-test to be healthy (it has its own healthcheck)
+          for i in {1..30}; do
+            status=$(docker inspect --format '{{.State.Health.Status}}' agentradar-api-test 2>/dev/null || echo "unknown")
+            if [ "$status" = "healthy" ]; then
+              echo "✓ api-test is healthy"
+              break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "✗ api-test failed to become healthy"
+              docker logs agentradar-api-test --tail=50
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Run integration tests via test-runner
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+              run --rm test-runner
+
+      - name: Capture logs on failure
         if: failure()
         run: |
           echo "::group::postgres-test"
-          docker compose -f docker-compose.yml -f docker-compose.test.yml logs postgres-test --tail=100 || true
+          docker logs agentradar-postgres-test --tail=100 || true
           echo "::endgroup::"
           echo "::group::neo4j-test"
-          docker compose -f docker-compose.yml -f docker-compose.test.yml logs neo4j-test --tail=100 || true
+          docker logs agentradar-neo4j-test --tail=100 || true
           echo "::endgroup::"
           echo "::group::minio-test"
-          docker compose -f docker-compose.yml -f docker-compose.test.yml logs minio-test --tail=100 || true
+          docker logs agentradar-minio-test --tail=100 || true
           echo "::endgroup::"
           echo "::group::api-test"
-          docker compose -f docker-compose.yml -f docker-compose.test.yml logs api-test --tail=100 || true
+          docker logs agentradar-api-test --tail=100 || true
           echo "::endgroup::"
 
-      - name: Tear down test plane
+      - name: Tear down
         if: always()
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans || true
+          docker compose -f docker-compose.yml -f docker-compose.test.yml \
+              down -v --remove-orphans || true
