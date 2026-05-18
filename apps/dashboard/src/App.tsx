@@ -5,6 +5,7 @@ import { TopConceptsCard } from "@/components/TopConceptsCard";
 import { QuickLinksCard } from "@/components/QuickLinksCard";
 import { LatestForecastsCard } from "@/components/LatestForecastsCard";
 import { SourceBreakdownCard } from "@/components/SourceBreakdownCard";
+import { DigestsTab } from "@/components/DigestsTab";
 import { Tabs } from "@/components/Tabs";
 
 function OverviewTab() {
@@ -70,6 +71,7 @@ export default function App() {
           tabs={[
             { id: "overview", label: "Overview", content: <OverviewTab /> },
             { id: "forecasts", label: "Forecasts", content: <ForecastsTab /> },
+            { id: "digests", label: "Digests", content: <DigestsTab /> },
             { id: "operations", label: "Operations", content: <OperationsTab /> },
           ]}
           initialTab="overview"

@@ -483,10 +483,18 @@ async def _aggregate_digest(state: ForecastState) -> dict[str, Any]:
     }
     system = (
         "You are an agentic-AI editor synthesizing a weekly digest. Given "
-        "a list of forecasts, identify cross-cutting themes (2-4 sentences) "
-        "and pick the single most notable forecast (with one sentence on "
-        "why it matters). Be concrete; reference specific concept names. "
-        "Avoid hedging or generalities."
+        "a list of forecasts, write a SINGLE PARAGRAPH (2-4 sentences) "
+        "identifying cross-cutting themes — patterns you see across multiple "
+        "forecasts, areas of convergence or divergence, what stands out as "
+        "notable. Reference specific concept names. Avoid hedging.\n\n"
+        "Then pick the SINGLE most notable forecast and explain in ONE "
+        "SENTENCE why it matters most.\n\n"
+        "IMPORTANT format constraints:\n"
+        "- 'themes' is ONE STRING containing prose, NOT a list/array. "
+        "Write complete sentences separated by periods, not bullet points.\n"
+        "- 'standout' is ONE STRING containing one sentence about the most "
+        "notable forecast.\n"
+        "- Do NOT use brackets, quotes-around-items, or list syntax."
     )
     user = f"FORECASTS:\n{digest_input}\n\nSynthesize."
 

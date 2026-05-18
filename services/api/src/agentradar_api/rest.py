@@ -8,6 +8,7 @@ propagation, same async patterns.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -305,4 +306,48 @@ async def source_breakdown() -> dict:
             }
             for r in rows
         ],
+    }
+
+
+@router.get("/digests/recent")
+async def digests_recent(limit: int = Query(10, ge=1, le=50)) -> dict:
+    """
+    Most recent digests, newest first. Each digest includes its themes,
+    standout pick, the snapshot of forecasts it summarized, and confidence
+    metadata.
+
+    The forecasts_snapshot is the digest's view of those forecasts at the
+    time it was generated — they may diverge from the current forecasts
+    table over time. That's deliberate for reproducibility.
+    """
+    pg = get_pg_client()
+    pool = await pg._ensure()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, label, themes, standout, forecasts_snapshot,
+                   average_confidence, confidence_band, generated_at
+            FROM digests
+            ORDER BY generated_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    return {
+        "digests": [
+            {
+                "digest_id": str(r["id"]),
+                "label": r["label"],
+                "themes": r["themes"],
+                "standout": r["standout"],
+                "forecasts": json.loads(r["forecasts_snapshot"])
+                if isinstance(r["forecasts_snapshot"], str)
+                else r["forecasts_snapshot"],
+                "average_confidence": float(r["average_confidence"]),
+                "confidence_band": r["confidence_band"],
+                "generated_at": r["generated_at"].isoformat(),
+            }
+            for r in rows
+        ],
+        "count": len(rows),
     }

@@ -6,6 +6,7 @@ import type {
   TopConcept,
   Forecast,
   SourceBreakdown,
+  DigestsResponse,
 } from "./types";
 
 // All paths are relative — same-origin via the nginx proxy in prod,
@@ -34,4 +35,6 @@ export const api = {
     fetchJson<Forecast[]>(`/api/forecasts/recent?limit=${limit}`),
   sourceBreakdown: () =>
     fetchJson<SourceBreakdown>("/api/source-breakdown"),
+  digestsRecent: (limit = 10) =>     // <-- new
+    fetchJson<DigestsResponse>(`/api/digests/recent?limit=${limit}`),
 };
