@@ -12,11 +12,15 @@ Design:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+
+# stdlib
 from contextlib import asynccontextmanager
 from typing import Any
 
+# first-party (your own packages)
 from agentradar_core import Neo4jSettings, get_logger, settings
 
+# third-party
 from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncSession
 
 log = get_logger(__name__)
