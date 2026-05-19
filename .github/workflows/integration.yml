@@ -68,14 +68,15 @@ jobs:
             done
           done
 
-      - name: Run init sidecars (schema + bucket setup)
+      - name: Run init-neo4j-test
         run: |
-          # Run sidecars in foreground; they exit when done. Their exit code
-          # is propagated, so this step fails fast if either init script breaks.
           docker compose -f docker-compose.yml -f docker-compose.test.yml \
               up --abort-on-container-exit \
               --exit-code-from init-neo4j-test \
               init-neo4j-test
+
+      - name: Run init-minio-test
+        run: |
           docker compose -f docker-compose.yml -f docker-compose.test.yml \
               up --abort-on-container-exit \
               --exit-code-from init-minio-test \
